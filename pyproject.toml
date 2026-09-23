@@ -13,6 +13,7 @@ dependencies = [
     "scipy>=1.11",
     "scikit-learn>=1.4",
     "networkx>=3.2",
+    "rank-bm25>=0.2",
 ]
 
 [project.optional-dependencies]
