@@ -195,14 +195,14 @@ _PREFIXES = re.compile(r"^(?:thành phố|tp\.?|tỉnh|thị xã|tx\.?|huyện|q
 _NUMBERED_DISTRICT = re.compile(r"(?:quận|q\.?|district)\s*\d+")
 
 
-def _tone_new_style(text: str) -> str:
+def tone_new_style(text: str) -> str:
     nfd = unicodedata.normalize("NFD", text)
     nfd = _OLD_TONE.sub(lambda m: "".join(g for g in (m[1], m[3], m[2], m[4], m[6], m[5]) if g), nfd)
     return unicodedata.normalize("NFC", nfd)
 
 
 def _key(text: str) -> str:
-    text = _tone_new_style(text.lower())
+    text = tone_new_style(text.lower())
     text = text.replace("-", " ")
     return re.sub(r"\s+", " ", text).strip(" .")
 
