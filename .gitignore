@@ -1,0 +1,18 @@
+# Sổ tay Honda Civic (đề tài đã loại), 11 MB — không đưa vào git.
+i6SlQHr2BeKoVMC6NggY.pdf
+
+# --- Bí mật ---
+.env
+
+# --- Dữ liệu tải về ---
+data/raw/
+
+# --- Python ---
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+
+# --- macOS ---
+.DS_Store
