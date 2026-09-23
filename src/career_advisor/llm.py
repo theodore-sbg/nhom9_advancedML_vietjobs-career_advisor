@@ -70,6 +70,8 @@ class GeminiClient(LLMClient):
             temperature=TEMPERATURE,
             max_output_tokens=MAX_OUTPUT_TOKENS,
             response_mime_type="application/json" if json_output else None,
+            # Không dùng function calling. Tắt để SDK khỏi in cảnh báo AFC ở mỗi lượt gọi.
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
         )
         resp = self._sdk.models.generate_content(model=self.model, contents=prompt, config=config)
         return resp.text or ""
