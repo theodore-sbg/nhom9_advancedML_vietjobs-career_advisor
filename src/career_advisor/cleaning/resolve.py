@@ -18,12 +18,21 @@ from collections.abc import Callable
 import numpy as np
 import pandas as pd
 
-from career_advisor.llm import extract_json
+from career_advisor.llm import LLMGenerationError, extract_json
 
-# Ngưỡng tạm. Task 8 chọn lại trên phần dev của bộ nhãn tay.
-AUTO_THRESHOLD = 0.92
-LLM_LOW = 0.84
-MAX_CLUSTER = 30
+# Chọn trên phần dev của bộ nhãn tay (scripts/evaluate.py er-thresholds, Task 8):
+# - cosine ≥ 0,90: precision 0,983, recall 0,648 trên dev (0,92 chỉ có recall 0,523);
+# - LLM chỉ đạt precision ≥ 0,95 với kỹ năng chuyên môn (12/12 cặp dev đúng). Với kỹ năng mềm
+#   (cụm dài, mơ hồ) precision chỉ khoảng 0,8, nên kỹ năng mềm không qua tầng LLM.
+AUTO_THRESHOLD = 0.90
+LLM_LOW = 0.78
+LLM_KINDS = ("technical",)
+# Mọi tên trong cụm phải có cosine với đại diện ≥ mức thấp nhất mà ta tin LLM. Dùng chung cho mọi
+# hệ để phần embedding của hệ "đủ 3 tầng" và hệ "chỉ embedding" giống hệt nhau.
+MIN_REP_COSINE = LLM_LOW
+# Trần 30 ban đầu làm 82 cụm bị chặn giữa chừng (vd "phần mềm kế toán" và "các phần mềm kế toán").
+# Chống trôi nghĩa giờ do MIN_REP_COSINE lo, trần chỉ còn để giới hạn chi phí kiểm tra xung đột.
+MAX_CLUSTER = 100
 # Chỉ hỏi LLM khi cả hai kỹ năng đều thành node đồ thị (≥ 5 tin). Đuôi hiếm để tầng embedding lo.
 MIN_LLM_COUNT = 5
 LLM_BATCH = 25
@@ -71,11 +80,23 @@ def _conflict(a: str, b: str) -> bool:
 
 
 def merge_clusters(
-    skills: list[str], counts: list[int], pairs: pd.DataFrame, max_cluster: int = MAX_CLUSTER
+    skills: list[str],
+    counts: list[int],
+    pairs: pd.DataFrame,
+    max_cluster: int = MAX_CLUSTER,
+    vectors: np.ndarray | None = None,
+    min_rep_cosine: float | None = None,
 ) -> dict[str, str]:
-    """Gộp các cặp thành cụm, trả `skill → đại diện`. Đại diện là thành viên xuất hiện nhiều nhất."""
+    """Gộp các cặp thành cụm, trả `skill → đại diện`. Đại diện là thành viên xuất hiện nhiều nhất.
+
+    Nếu có `min_rep_cosine`, không gộp hai cụm khi có thành viên cách đại diện mới quá xa. Chốt này
+    chặn chuỗi A≈B≈C… trôi nghĩa: từng cặp đều giống, nhưng hai đầu chuỗi đã khác hẳn nhau.
+    """
     parent = list(range(len(skills)))
     members = {i: [i] for i in range(len(skills))}
+
+    def representative(group: list[int]) -> int:
+        return min(group, key=lambda k: (-counts[k], len(skills[k]), skills[k]))
 
     def find(x: int) -> int:
         while parent[x] != x:
@@ -90,12 +111,17 @@ def merge_clusters(
             continue
         if any(_conflict(skills[a], skills[b]) for a in members[ri] for b in members[rj]):
             continue
+        if min_rep_cosine is not None and vectors is not None:
+            union = members[ri] + members[rj]
+            rep_vector = vectors[representative(union)]
+            if float(np.min(vectors[union] @ rep_vector)) < min_rep_cosine:
+                continue
         parent[rj] = ri
         members[ri].extend(members.pop(rj))
 
     rep = {}
     for group in members.values():
-        best = min(group, key=lambda k: (-counts[k], len(skills[k]), skills[k]))
+        best = representative(group)
         rep.update({skills[k]: skills[best] for k in group})
     return rep
 
@@ -108,8 +134,10 @@ def resolve_tiers(
     judge: Callable[[list[tuple[str, str]]], list[bool]] | None = None,
     min_llm_count: int = MIN_LLM_COUNT,
     max_cluster: int = MAX_CLUSTER,
+    llm_kinds: tuple[str, ...] = LLM_KINDS,
+    min_rep_cosine: float = MIN_REP_COSINE,
 ) -> pd.DataFrame:
-    """Gộp tên theo tầng embedding và (nếu có `judge`) tầng LLM.
+    """Gộp tên theo tầng embedding và (nếu có `judge`) tầng LLM cho các loại trong `llm_kinds`.
 
     `skills` có cột skill, count, kind, cùng thứ tự với `vectors`. Chỉ gộp kỹ năng cùng loại.
     Trả các dòng bị gộp: skill, canonical, tier ("embedding" hoặc "llm"), score (cosine với đại diện).
@@ -120,13 +148,13 @@ def resolve_tiers(
     pairs = candidate_pairs(vectors, min(llm_low, auto_threshold) if judge else auto_threshold)
     pairs = pairs[kinds[pairs["i"].astype(int)] == kinds[pairs["j"].astype(int)]]
     auto = pairs[pairs["score"] >= auto_threshold]
-    emb_rep = merge_clusters(names, counts.tolist(), auto, max_cluster)
+    emb_rep = merge_clusters(names, counts.tolist(), auto, max_cluster, vectors, min_rep_cosine)
 
     accepted = auto
     if judge is not None:
         band = pairs[(pairs["score"] < auto_threshold) & (pairs["score"] >= llm_low)]
         i, j = band["i"].astype(int).to_numpy(), band["j"].astype(int).to_numpy()
-        band = band[np.minimum(counts[i], counts[j]) >= min_llm_count]
+        band = band[(np.minimum(counts[i], counts[j]) >= min_llm_count) & np.isin(kinds[i], llm_kinds)]
         index = {name: k for k, name in enumerate(names)}
         asks: dict[frozenset[str], tuple[str, str, float]] = {}
         for a, b, score in zip(band["i"].astype(int), band["j"].astype(int), band["score"], strict=True):
@@ -142,7 +170,7 @@ def resolve_tiers(
         )
         accepted = pd.concat([auto, approved], ignore_index=True)
 
-    final = merge_clusters(names, counts.tolist(), accepted, max_cluster)
+    final = merge_clusters(names, counts.tolist(), accepted, max_cluster, vectors, min_rep_cosine)
     index = {name: k for k, name in enumerate(names)}
     rows = [
         (s, r, "embedding" if emb_rep[s] == r else "llm", float(vectors[index[s]] @ vectors[index[r]]))
@@ -210,7 +238,17 @@ def judge_pairs(client, pairs: list[tuple[str, str]], batch_size: int = LLM_BATC
     """Hỏi LLM từng lô `batch_size` cặp. `client` là một `LLMClient` (có cache)."""
     verdicts: list[bool] = []
     for start in range(0, len(pairs), batch_size):
-        batch = pairs[start : start + batch_size]
-        text = client.complete(judge_prompt(batch), system=JUDGE_SYSTEM, json_output=True)
-        verdicts.extend(parse_judgements(text, len(batch)))
+        verdicts.extend(_judge_batch(client, pairs[start : start + batch_size]))
     return verdicts
+
+
+def _judge_batch(client, batch: list[tuple[str, str]]) -> list[bool]:
+    """Lô không sinh được câu trả lời thì chia đôi hỏi lại. Một cặp vẫn lỗi thì coi là "khác"."""
+    try:
+        text = client.complete(judge_prompt(batch), system=JUDGE_SYSTEM, json_output=True)
+    except LLMGenerationError:
+        if len(batch) == 1:
+            return [False]
+        half = len(batch) // 2
+        return _judge_batch(client, batch[:half]) + _judge_batch(client, batch[half:])
+    return parse_judgements(text, len(batch))

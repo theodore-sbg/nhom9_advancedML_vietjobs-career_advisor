@@ -100,3 +100,22 @@ def test_embedding_tier_only_merges_same_kind_and_lists_changed_skills():
     assert merges[["skill", "canonical"]].values.tolist() == [["reactjs", "react"]]
     assert list(merges.columns) == ["skill", "canonical", "tier", "score"]
     assert set(merges.tier) == {"embedding"}
+
+
+def test_chain_is_cut_when_a_member_drifts_too_far_from_the_representative():
+    # a≈b và b≈c đều được duyệt, nhưng c cách xa a (đại diện của cụm).
+    vectors = _unit([1, 0, 0], [0.8, 0.6, 0], [0.3, 0.95, 0])
+    pairs = _pairs((0, 1, 0.8), (1, 2, 0.75))
+
+    rep = merge_clusters(["a", "b", "c"], [10, 5, 1], pairs, vectors=vectors, min_rep_cosine=0.7)
+
+    assert rep["b"] == "a"
+    assert rep["c"] == "c"  # cos(a, c) ≈ 0.3 < 0.7
+
+
+def test_without_floor_the_same_chain_is_merged():
+    pairs = _pairs((0, 1, 0.8), (1, 2, 0.75))
+
+    rep = merge_clusters(["a", "b", "c"], [10, 5, 1], pairs)
+
+    assert rep["c"] == "a"

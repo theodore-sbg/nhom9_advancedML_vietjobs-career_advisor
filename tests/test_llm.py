@@ -265,3 +265,28 @@ def test_ollama_client_plain_text_has_no_format():
 
     assert answer == "Hà Nội"
     assert "format" not in captured[0][1]
+
+
+def test_ollama_repeat_limit_is_a_generation_error_and_not_retried():
+    import http.server
+    import threading
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.rfile.read(int(self.headers["Content-Length"]))
+            self.send_response(500)
+            self.end_headers()
+            self.wfile.write(b'{"error":"prediction aborted, token repeat limit reached"}')
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    client = llm.OllamaClient("m", f"http://127.0.0.1:{server.server_port}")
+    client._sleep = lambda s: pytest.fail("không được thử lại lỗi sinh tất định")
+    try:
+        with pytest.raises(llm.LLMGenerationError, match="repeat"):
+            client.complete("q")
+    finally:
+        server.shutdown()

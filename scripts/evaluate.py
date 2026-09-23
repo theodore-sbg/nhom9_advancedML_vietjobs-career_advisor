@@ -11,7 +11,7 @@ from datetime import date
 
 import pandas as pd
 
-from career_advisor.cleaning.resolve import AUTO_THRESHOLD, LLM_LOW, judge_pairs
+from career_advisor.cleaning.resolve import AUTO_THRESHOLD, LLM_KINDS, LLM_LOW, judge_pairs
 from career_advisor.config import EVAL_DIR, PROCESSED_DIR
 from career_advisor.evaluation.entity_resolution import choose_threshold, labeled_pairs, predict_same
 from career_advisor.evaluation.metrics import precision_recall
@@ -44,11 +44,14 @@ def er_thresholds() -> None:
     auto, auto_table = choose_threshold(dev["truth"], lambda t: dev["cosine"] >= t, AUTO_CANDIDATES)
     print("Tự gộp khi cosine ≥ t (dev):\n", auto_table.round(3).to_string(index=False))
     upper = auto if auto is not None else max(AUTO_CANDIDATES)
-    in_band = dev[dev["cosine"] < upper].reset_index(drop=True)
-    low, low_table = choose_threshold(
-        in_band["truth"], lambda t: (in_band["cosine"] >= t) & in_band["llm_same"], LOW_CANDIDATES
-    )
-    print(f"LLM trong vùng [t, {upper}) (dev):\n", low_table.round(3).to_string(index=False))
+    kinds = pd.read_parquet(PROCESSED_DIR / "emb" / "skills_index.parquet").set_index("skill")["kind"]
+    dev["llm_kind"] = dev["a"].map(kinds).isin(LLM_KINDS) & dev["b"].map(kinds).isin(LLM_KINDS)
+    for label, rows in (("mọi cặp", dev), (f"chỉ loại {LLM_KINDS}", dev[dev["llm_kind"]])):
+        band = rows[rows["cosine"] < upper].reset_index(drop=True)
+        low, low_table = choose_threshold(
+            band["truth"], lambda t, b=band: (b["cosine"] >= t) & b["llm_same"], LOW_CANDIDATES
+        )
+        print(f"LLM trong vùng [t, {upper}), {label} (dev):\n", low_table.round(3).to_string(index=False))
     result = {
         **_meta(client),
         "auto_threshold": auto,

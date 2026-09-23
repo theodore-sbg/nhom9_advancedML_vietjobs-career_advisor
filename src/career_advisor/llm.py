@@ -33,6 +33,13 @@ LOCAL_TIMEOUT_SECONDS = 600
 _THINK = re.compile(r"<think>.*?</think>", flags=re.S)
 
 
+class LLMGenerationError(RuntimeError):
+    """Model không sinh xong câu trả lời (ví dụ kẹt vòng lặp lặp token).
+
+    Với temperature 0, cùng prompt sẽ lỗi lại y hệt, nên không thử lại. Nơi gọi tự đổi prompt.
+    """
+
+
 def strip_thinking(text: str) -> str:
     """Bỏ phần suy nghĩ `<think>…</think>` mà một số model (Qwen) in ra trước câu trả lời."""
     return _THINK.sub("", text).strip()
@@ -222,7 +229,13 @@ class OllamaClient(LLMClient):
         }
         if json_output:
             body["format"] = "json"
-        data = _post_json(f"{self.base_url}/api/chat", body)
+        try:
+            data = _post_json(f"{self.base_url}/api/chat", body)
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            if "repeat limit" in detail:
+                raise LLMGenerationError(detail) from exc
+            raise
         return strip_thinking(data["message"]["content"] or "")
 
     def _is_transient(self, exc: Exception) -> bool:

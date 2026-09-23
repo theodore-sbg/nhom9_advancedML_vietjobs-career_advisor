@@ -119,3 +119,38 @@ def test_judge_prompt_lists_pairs_with_ids():
     prompt = judge_prompt([("excel", "ms excel"), ("java", "javascript")])
 
     assert "1. excel | ms excel" in prompt and "2. java | javascript" in prompt
+
+
+def test_resolve_tiers_asks_llm_only_about_allowed_kinds():
+    skills, v = _skills()
+    skills.loc[skills.skill.isin(["d", "e"]), "kind"] = "soft"
+    asked = []
+
+    def judge(pairs):
+        asked.extend(pairs)
+        return [True] * len(pairs)
+
+    merges = resolve_tiers(skills, v, 0.95, 0.5, judge=judge, min_llm_count=1, llm_kinds=("technical",))
+
+    assert all(set(p) != {"d", "e"} for p in asked)
+    assert "e" not in set(merges.skill) and "d" not in set(merges.skill)
+    assert ("a", "c") in asked or ("c", "a") in asked
+
+
+def test_judge_pairs_splits_a_batch_that_fails_to_generate():
+    from career_advisor.llm import LLMGenerationError
+
+    good = _answer_all(lambda a, b: True)
+
+    def respond(prompt: str) -> str:
+        if "bad | pair" in prompt:
+            raise LLMGenerationError("token repeat limit reached")
+        return good(prompt)
+
+    client = FakeLLMClient(respond)
+    pairs = [("a", "b"), ("bad", "pair"), ("c", "d"), ("e", "f")]
+
+    result = judge_pairs(client, pairs, batch_size=4)
+
+    # Lô 4 cặp lỗi → chia đôi; nửa có cặp hỏng chia tiếp; cặp hỏng đứng một mình thì coi là "khác".
+    assert result == [True, False, True, True]
