@@ -6,6 +6,8 @@ i6SlQHr2BeKoVMC6NggY.pdf
 
 # --- Dữ liệu tải về ---
 data/raw/
+data/processed/
+data/cache/
 
 # --- Python ---
 .venv/
