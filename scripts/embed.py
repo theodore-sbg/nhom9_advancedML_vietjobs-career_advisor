@@ -1,7 +1,9 @@
-"""Mã hoá kỹ năng và tin tuyển dụng bằng bge-m3, rồi chạy tầng gộp tên bằng embedding.
+"""Mã hoá kỹ năng và tin tuyển dụng bằng bge-m3.
 
-python scripts/embed.py skills      # nhanh: mã hoá kỹ năng + gộp → skill_merges.parquet
-python scripts/embed.py postings    # lâu: mã hoá 48 nghìn tin, nên chạy nền
+python scripts/embed.py skills      # nhanh (khoảng 2 phút): kỹ năng sau tầng luật
+python scripts/embed.py postings    # lâu (khoảng 60 phút): 48 nghìn tin, nên chạy nền
+
+Gộp tên kỹ năng từ các vector này nằm ở scripts/resolve_skills.py.
 """
 
 import sys
@@ -9,7 +11,6 @@ import sys
 import numpy as np
 import pandas as pd
 
-from career_advisor.cleaning.resolve import AUTO_THRESHOLD, embedding_tier
 from career_advisor.config import PROCESSED_DIR
 from career_advisor.embeddings import BgeM3Encoder, encode_in_chunks
 
@@ -35,13 +36,7 @@ def run_skills(encoder: BgeM3Encoder) -> None:
     skills = skill_table()
     skills.to_parquet(EMB_DIR / "skills_index.parquet")
     vectors = encode_in_chunks(skills["skill"].tolist(), EMB_DIR / "skills", encoder)
-    merges = embedding_tier(skills, vectors)
-    merges.to_parquet(PROCESSED_DIR / "skill_merges.parquet")
-    after = skills["skill"].nunique() - len(merges)
-    print(
-        f"Kỹ năng sau tầng luật: {len(skills):,}. Tầng embedding (cosine ≥ {AUTO_THRESHOLD}) gộp "
-        f"{len(merges):,} → còn {after:,}"
-    )
+    print(f"Đã mã hoá {len(vectors):,} kỹ năng")
 
 
 def run_postings(encoder: BgeM3Encoder) -> None:
