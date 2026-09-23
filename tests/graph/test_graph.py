@@ -193,3 +193,39 @@ def test_real_graph_salary_medians_match_pandas():
 
         assert summary.n == len(expected)
         assert summary.median == pytest.approx(expected.median())
+
+
+@pytest.mark.data
+def test_real_graph_answers_the_question_set_like_pandas():
+    import json
+    import pickle
+
+    from career_advisor.config import EVAL_DIR, PROCESSED_DIR
+
+    graph_path, questions_path = PROCESSED_DIR / "graph.pkl", EVAL_DIR / "questions" / "questions.jsonl"
+    if not graph_path.exists() or not questions_path.exists():
+        pytest.skip("chưa dựng đồ thị hoặc chưa sinh câu hỏi")
+    with graph_path.open("rb") as f:
+        G = pickle.load(f)
+    checked = 0
+    for line in questions_path.read_text(encoding="utf-8").splitlines():
+        item = json.loads(line)
+        p, a = item["params"], item["answer"]
+        nodes = {
+            "salary_title": [q.title_id(p.get("title", ""))],
+            "salary_category_province": [
+                q.category_id(p.get("category", "")),
+                q.province_id(p.get("province", "")),
+            ],
+            "salary_3way": [
+                q.title_id(p.get("title", "")),
+                q.province_id(p.get("province", "")),
+                q.experience_id(p.get("experience_level", "")),
+            ],
+        }.get(item["type"])
+        if nodes is None:
+            continue
+        summary = q.salary_summary(G, *nodes)
+        assert (summary.median, summary.n) == (a["median"], a["n"]), item["id"]
+        checked += 1
+    assert checked > 0
