@@ -1,0 +1,22 @@
+{
+  "date": "2026-09-24",
+  "commit": "cb8338e",
+  "llm": "ollama:qwen3.5:9b",
+  "limit_seconds": 20,
+  "question": {
+    "n": 26,
+    "n_with_llm": 24,
+    "median": 6.486326312500751,
+    "max": 12.605942916998174,
+    "share_within_limit": 1.0,
+    "mean_llm_calls": 0.9230769230769231
+  },
+  "cv_plan": {
+    "n": 5,
+    "n_with_llm": 5,
+    "median": 55.65009429099155,
+    "max": 85.07295533400611,
+    "share_within_limit": 0.0,
+    "mean_llm_calls": 2
+  }
+}

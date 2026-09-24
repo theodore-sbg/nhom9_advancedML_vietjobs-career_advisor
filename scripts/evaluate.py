@@ -6,6 +6,7 @@ python scripts/evaluate.py retrieval           # 5 cách truy xuất CV → tin,
 python scripts/evaluate.py kappa               # độ khớp giữa điểm LLM và nhãn tay (người, Claude)
 python scripts/evaluate.py kg-rag              # KG-RAG so với vector RAG trên bộ 50 câu hỏi
 python scripts/evaluate.py ablation            # 1 agent so với 4 agent, có và không có gộp tên kỹ năng
+python scripts/evaluate.py latency             # thời gian trả lời của luồng 4 agent, không dùng cache
 """
 
 import json
@@ -403,6 +404,39 @@ def ablation() -> None:
     )
 
 
+def latency() -> None:
+    """Đo thời gian luồng 4 agent trên câu hỏi dev và 5 CV dev, với cache LLM rỗng (thư mục tạm)."""
+    import statistics
+    import tempfile
+    from pathlib import Path
+
+    from career_advisor.agents.workflow import MultiAgent
+
+    graph = _load_graph("graph.pkl")
+    cvs = [json.loads(line) for line in (EVAL_DIR / "cvs" / "cvs.jsonl").read_text("utf-8").splitlines()]
+    with tempfile.TemporaryDirectory() as tmp:
+        client = make_client(cache_dir=Path(tmp))
+        agent = MultiAgent(client, graph)
+        agent.run(question="Lương trung vị của kế toán tổng hợp là bao nhiêu?")  # nạp model vào bộ nhớ
+        runs = {
+            "question": [agent.run(question=q["question"]) for q in load_questions() if q["split"] == "dev"],
+            "cv_plan": [agent.run(cv_text=cv["text"]) for cv in cvs if cv["split"] == "dev"][:5],
+        }
+    result = {**_meta(client), "limit_seconds": 20}
+    for name, results in runs.items():
+        seconds = [r.seconds for r in results if r.llm_calls]
+        result[name] = {
+            "n": len(results),
+            "n_with_llm": len(seconds),
+            "median": statistics.median(seconds),
+            "max": max(seconds),
+            "share_within_limit": sum(s <= 20 for s in seconds) / len(seconds),
+            "mean_llm_calls": statistics.mean(r.llm_calls for r in results),
+        }
+        print(name, {k: round(v, 2) if isinstance(v, float) else v for k, v in result[name].items()})
+    (RESULTS / "latency.json").write_text(json.dumps(result, ensure_ascii=False, indent=2))
+
+
 if __name__ == "__main__":
     RESULTS.mkdir(parents=True, exist_ok=True)
     commands = {
@@ -412,5 +446,6 @@ if __name__ == "__main__":
         "kappa": kappa,
         "kg-rag": kg_rag,
         "ablation": ablation,
+        "latency": latency,
     }
     commands[sys.argv[1]]()

@@ -33,6 +33,8 @@ FALLBACK_INTRO = "Câu trả lời tự viết chưa qua được bước kiểm
 class AgentState(TypedDict, total=False):
     question: str
     cv_text: str
+    title: str | None
+    province: str | None
     linked: LinkedEntities
     facts: list[Fact]
     answer: Answer
@@ -87,6 +89,11 @@ class MultiAgent:
 
         def cv_agent(state: AgentState) -> AgentState:
             linked = extract_profile(client, G, state["cv_text"])
+            # Nghề và tỉnh người dùng tự chọn trên giao diện được ưu tiên hơn điều CV Agent đọc ra.
+            if state.get("title"):
+                linked.titles, linked.categories = [state["title"]], []
+            if state.get("province"):
+                linked.provinces = [state["province"]]
             return {"linked": linked, "llm_calls": state["llm_calls"] + 1, "trace": [*state["trace"], "cv"]}
 
         def graph_agent(state: AgentState) -> AgentState:
@@ -135,10 +142,20 @@ class MultiAgent:
         graph.add_conditional_edges("verifier", after_verifier, ["planner", END])
         return graph.compile()
 
-    def run(self, question: str = "", cv_text: str = "") -> AgentResult:
+    def run(
+        self, question: str = "", cv_text: str = "", title: str | None = None, province: str | None = None
+    ) -> AgentResult:
         start = time.perf_counter()
         state = self.app.invoke(
-            {"question": question, "cv_text": cv_text, "attempts": 0, "llm_calls": 0, "trace": []}
+            {
+                "question": question,
+                "cv_text": cv_text,
+                "title": title,
+                "province": province,
+                "attempts": 0,
+                "llm_calls": 0,
+                "trace": [],
+            }
         )
         return AgentResult(
             state["answer"],

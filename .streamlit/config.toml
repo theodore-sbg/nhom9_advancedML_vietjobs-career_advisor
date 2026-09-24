@@ -1,0 +1,3 @@
+[server]
+# Không theo dõi tệp: quét module transformers sinh hàng trăm lỗi torchvision trong log.
+fileWatcherType = "none"

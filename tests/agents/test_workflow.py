@@ -129,3 +129,12 @@ def test_single_and_multi_agent_send_the_same_first_prompt_for_questions(small_g
     MultiAgent(multi, small_graph).run(question=QUESTION)
 
     assert single.prompts == multi.prompts
+
+
+def test_title_and_province_chosen_in_the_ui_override_the_cv_agent(small_graph):
+    client = _llm([GOOD], profile={**PROFILE, "target_title": "Kinh doanh", "province": "Hà Nội"})
+
+    result = MultiAgent(client, small_graph).run(cv_text=CV, title="kế toán tổng hợp", province="bắc ninh")
+
+    assert result.answer.linked.titles == ["kế toán tổng hợp"]
+    assert result.answer.linked.provinces == ["bắc ninh"]
