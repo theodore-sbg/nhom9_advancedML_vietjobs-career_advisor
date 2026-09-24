@@ -8,6 +8,7 @@ python scripts/evaluate.py kg-rag              # KG-RAG so với vector RAG trê
 python scripts/evaluate.py ablation            # 1 agent so với 4 agent, có và không có gộp tên kỹ năng
 python scripts/evaluate.py latency             # thời gian trả lời của luồng 4 agent, không dùng cache
 python scripts/evaluate.py data-quality        # LLM kiểm 200 tin, và độ khớp với 50 tin người kiểm tay
+python scripts/evaluate.py data-quality-score  # chấm lại từ kết quả LLM đã lưu, không gọi LLM
 """
 
 import json
@@ -25,6 +26,7 @@ from career_advisor.evaluation.skill_pairs import load_sheet
 from career_advisor.llm import make_client
 
 RESULTS = EVAL_DIR / "results"
+LLM_QUALITY = EVAL_DIR / "labels" / "data_quality_llm.csv"
 AUTO_CANDIDATES = (0.84, 0.86, 0.88, 0.90, 0.92, 0.94, 0.95)
 LOW_CANDIDATES = (0.78, 0.80, 0.82, 0.84, 0.86, 0.88)
 
@@ -470,10 +472,7 @@ def latency() -> None:
 def data_quality() -> None:
     from career_advisor.data import load_postings
     from career_advisor.evaluation.data_quality import (
-        FIELDS,
         SYSTEM,
-        agreement,
-        error_rates,
         extracted_fields,
         judge_prompt,
         parse_judgement,
@@ -500,21 +499,24 @@ def data_quality() -> None:
         rows.append({"posting_id": pid, **parse_judgement(reply), "reason": parse_reason(reply)})
         if k % 20 == 0:
             print(f"  {k}/{len(ids)}", flush=True)
-    llm = pd.DataFrame(rows)
-    llm.to_csv(EVAL_DIR / "labels" / "data_quality_llm.csv", index=False)
+    pd.DataFrame(rows).to_csv(LLM_QUALITY, index=False)
+    score_data_quality(_meta(client))
 
+
+def score_data_quality(meta: dict | None = None) -> None:
+    """Chấm lại từ kết quả LLM đã lưu (không gọi LLM) và nhãn tay của người dùng."""
+    from career_advisor.evaluation.data_quality import FIELDS, agreement, error_rates
+
+    llm = pd.read_csv(LLM_QUALITY, keep_default_na=False).replace("", None)
     result = {
-        **_meta(client),
+        **(meta or json.loads((RESULTS / "data_quality.json").read_text())),
         "n_llm": len(llm),
         "llm_unparsed": int(llm[list(FIELDS)].isna().all(axis=1).sum()),
     }
     result["llm_error_rates"] = error_rates(llm)
     path = EVAL_DIR / "labels" / "data_quality.csv"
-    human = pd.read_csv(path, dtype=str, keep_default_na=False) if path.exists() else pd.DataFrame()
-    if len(human):
-        human = human[(human[list(FIELDS)] != "").all(axis=1)].assign(
-            posting_id=lambda d: d["posting_id"].astype(int)
-        )
+    human = pd.read_csv(path, dtype=str, keep_default_na=False)
+    human = human[(human[list(FIELDS)] != "").all(axis=1)].astype({"posting_id": int})
     result["n_human"] = len(human)
     if len(human):
         result["human_error_rates"] = error_rates(human)
@@ -543,5 +545,6 @@ if __name__ == "__main__":
         "ablation": ablation,
         "latency": latency,
         "data-quality": data_quality,
+        "data-quality-score": score_data_quality,
     }
     commands[sys.argv[1]]()

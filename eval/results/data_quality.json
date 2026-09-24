@@ -1,6 +1,6 @@
 {
   "date": "2026-09-24",
-  "commit": "e5e58c8",
+  "commit": "22ee760",
   "llm": "ollama:qwen3.5:9b",
   "n_llm": 200,
   "llm_unparsed": 38,
@@ -26,6 +26,72 @@
       "error_rate": 0.2795031055900621
     }
   },
-  "n_human": 0,
-  "llm_human_agreement": "chờ nhãn tay: scripts/label_data_quality.py"
+  "annotator": "human",
+  "n_human": 50,
+  "human_error_rates": {
+    "skills": {
+      "n": 50,
+      "wrong": 6,
+      "error_rate": 0.12
+    },
+    "salary": {
+      "n": 50,
+      "wrong": 0,
+      "error_rate": 0.0
+    },
+    "experience": {
+      "n": 50,
+      "wrong": 0,
+      "error_rate": 0.0
+    },
+    "education": {
+      "n": 49,
+      "wrong": 16,
+      "error_rate": 0.32653061224489793
+    }
+  },
+  "llm_error_rates_on_human_sample": {
+    "skills": {
+      "n": 39,
+      "wrong": 22,
+      "error_rate": 0.5641025641025641
+    },
+    "salary": {
+      "n": 39,
+      "wrong": 1,
+      "error_rate": 0.02564102564102564
+    },
+    "experience": {
+      "n": 39,
+      "wrong": 8,
+      "error_rate": 0.20512820512820512
+    },
+    "education": {
+      "n": 39,
+      "wrong": 11,
+      "error_rate": 0.28205128205128205
+    }
+  },
+  "llm_human_agreement": {
+    "skills": {
+      "n": 39,
+      "agreement": 0.46153846153846156,
+      "kappa": 0.01680672268907557
+    },
+    "salary": {
+      "n": 39,
+      "agreement": 0.9743589743589743,
+      "kappa": 0.0
+    },
+    "experience": {
+      "n": 39,
+      "agreement": 0.7948717948717948,
+      "kappa": 0.0
+    },
+    "education": {
+      "n": 38,
+      "agreement": 0.7631578947368421,
+      "kappa": 0.36900369003690037
+    }
+  }
 }
