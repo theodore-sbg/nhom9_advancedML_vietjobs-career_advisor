@@ -94,68 +94,81 @@ def entity_resolution() -> None:
 
 RELEVANCE_LLM = EVAL_DIR / "labels" / "relevance_llm.csv"
 RELEVANCE_HUMAN = EVAL_DIR / "labels" / "relevance_human.csv"
-# Nhãn do Claude gán khi người dùng chưa gán kịp. Báo riêng, không bao giờ gộp vào nhãn người.
-RELEVANCE_CLAUDE = EVAL_DIR / "labels" / "relevance_claude.csv"
-ANNOTATORS = {"human": RELEVANCE_HUMAN, "claude": RELEVANCE_CLAUDE}
 
 
-def _agreement(llm: pd.DataFrame, annotators: dict | None = None) -> dict:
-    """κ giữa điểm LLM và từng bộ nhãn tay (người, Claude), kèm ma trận nhầm lẫn."""
+def _human_labels() -> pd.DataFrame:
+    labels = pd.read_csv(RELEVANCE_HUMAN, dtype={"label": str}, keep_default_na=False)
+    return labels[labels["label"].isin(["0", "1", "2"])].astype({"label": int})
+
+
+def _agreement(llm: pd.DataFrame) -> dict:
+    """κ giữa điểm LLM và nhãn tay của người dùng, kèm độ khớp 2 mức và ma trận nhầm lẫn."""
     import numpy as np
 
     from career_advisor.evaluation.metrics import cohen_kappa
 
+    both = _human_labels().merge(llm.dropna(subset=["grade"]), on=["cv_id", "posting_id"])
+    a, b = both["label"].tolist(), both["grade"].astype(int).tolist()
+    confusion = pd.crosstab(pd.Series(a, name="human"), pd.Series(b, name="llm"))
+    return {
+        "n": len(both),
+        "unweighted": cohen_kappa(a, b),
+        "linear": cohen_kappa(a, b, "linear"),
+        "exact_agreement": float((pd.Series(a) == pd.Series(b)).mean()),
+        "mean_grade": {"human": float(np.mean(a)), "llm": float(np.mean(b))},
+        # Recall@k và MRR coi "phù hợp" là điểm ≥ RELEVANT (2); nDCG dùng cả 3 mức.
+        "binary": {
+            f">={t}": {
+                "kappa": cohen_kappa([int(x >= t) for x in a], [int(y >= t) for y in b]),
+                "agreement": float(np.mean([(x >= t) == (y >= t) for x, y in zip(a, b, strict=True)])),
+            }
+            for t in (1, 2)
+        },
+        "confusion": {str(k): {str(c): int(v) for c, v in row.items()} for k, row in confusion.iterrows()},
+    }
+
+
+def _human_check(llm: pd.DataFrame) -> dict:
+    """Kiểm chéo 5 cách truy xuất bằng nhãn tay: tỷ lệ phù hợp của các cặp có nhãn nằm trong top-10.
+    Để đối chiếu, tính cùng chỉ số với điểm Qwen trên đúng các cặp đó."""
+    from career_advisor.evaluation.retrieval_eval import K, labeled_precision
+
+    rankings = json.loads((RESULTS / "retrieval_rankings.json").read_text())
+    cvs = [json.loads(line) for line in (EVAL_DIR / "cvs" / "cvs.jsonl").read_text("utf-8").splitlines()]
+    split_of = {cv["id"]: cv["split"] for cv in cvs}
+    human = _human_labels()
+    qwen = human[["cv_id", "posting_id"]].merge(llm.dropna(subset=["grade"]), on=["cv_id", "posting_id"])
     out = {}
-    for name, path in (annotators or ANNOTATORS).items():
-        if not path.exists():
-            continue
-        labels = pd.read_csv(path, dtype={"label": str}, keep_default_na=False)
-        labels = labels[labels["label"].isin(["0", "1", "2"])]
-        both = labels.merge(llm.dropna(subset=["grade"]), on=["cv_id", "posting_id"])
-        if both.empty:
-            continue
-        a, b = both["label"].astype(int).tolist(), both["grade"].astype(int).tolist()
-        confusion = pd.crosstab(pd.Series(a, name=name), pd.Series(b, name="llm"))
-        out[f"{name}_vs_llm"] = {
-            "n": len(both),
-            "unweighted": cohen_kappa(a, b),
-            "linear": cohen_kappa(a, b, "linear"),
-            "exact_agreement": float((pd.Series(a) == pd.Series(b)).mean()),
-            # Recall@k và MRR coi "phù hợp" là điểm ≥ RELEVANT (2); nDCG dùng cả 3 mức.
-            "binary": {
-                f">={t}": {
-                    "kappa": cohen_kappa([int(x >= t) for x in a], [int(y >= t) for y in b]),
-                    "agreement": float(np.mean([(x >= t) == (y >= t) for x, y in zip(a, b, strict=True)])),
-                }
-                for t in (1, 2)
-            },
-            "confusion": {
-                str(k): {str(c): int(v) for c, v in row.items()} for k, row in confusion.iterrows()
-            },
-        }
+    for split in ("dev", "test"):
+        ranked = {cv: r for cv, r in rankings.items() if split_of[cv] == split}
+        tables = {}
+        for name, frame, column in (("human", human, "label"), ("qwen", qwen, "grade")):
+            grades: dict[str, dict[int, int]] = {}
+            for row in frame.itertuples(index=False):
+                grades.setdefault(row.cv_id, {})[int(row.posting_id)] = int(getattr(row, column))
+            tables[name] = labeled_precision(ranked, grades, k=K)
+        merged = tables["human"].merge(tables["qwen"], on="system", suffixes=("_human", "_qwen"))
+        print(f"Kiểm chéo bằng nhãn tay ({split}):\n", merged.round(3).to_string(index=False))
+        out[split] = merged.to_dict("records")
     return out
 
 
 def kappa() -> None:
-    result = _agreement(pd.read_csv(RELEVANCE_LLM))
-    # Người so với Claude: dùng nhãn Claude ở vị trí điểm LLM.
-    claude = pd.read_csv(ANNOTATORS["claude"], dtype={"label": str}, keep_default_na=False)
-    claude = claude[claude["label"].isin(["0", "1", "2"])].rename(columns={"label": "grade"})
-    human_only = {"human": ANNOTATORS["human"]}
-    for name, stats in _agreement(claude.astype({"grade": int}), human_only).items():
-        result[name.replace("_vs_llm", "_vs_claude")] = stats
-    for name, stats in result.items():
-        print(
-            f"{name}: n={stats['n']}, κ={stats['unweighted']:.3f}, κ tuyến tính={stats['linear']:.3f}, "
-            f"trùng khớp={stats['exact_agreement']:.1%}"
-        )
-        print("  ma trận (hàng: nhãn tay, cột: LLM):", stats["confusion"])
+    llm = pd.read_csv(RELEVANCE_LLM)
+    result = _agreement(llm)
+    print(
+        f"người–Qwen: n={result['n']}, κ={result['unweighted']:.3f}, κ tuyến tính={result['linear']:.3f}, "
+        f"trùng khớp={result['exact_agreement']:.1%}"
+    )
+    for t, stats in result["binary"].items():
+        print(f"  {t}: κ={stats['kappa']:.3f}, trùng khớp={stats['agreement']:.1%}")
+    print("  ma trận (hàng: nhãn tay, cột: Qwen):", result["confusion"])
     path = RESULTS / "retrieval.json"
-    if path.exists():
-        saved = json.loads(path.read_text())
-        saved.pop("kappa", None)
-        saved["agreement"] = result
-        path.write_text(json.dumps(saved, ensure_ascii=False, indent=2))
+    saved = json.loads(path.read_text())
+    saved.pop("kappa", None)
+    saved["agreement"] = {"human_vs_llm": result}
+    saved["human_check"] = _human_check(llm)
+    path.write_text(json.dumps(saved, ensure_ascii=False, indent=2))
 
 
 def retrieval() -> None:

@@ -45,3 +45,32 @@ def score_systems(
             }
         )
     return pd.DataFrame(rows)
+
+
+def labeled_precision(
+    rankings: dict[str, dict[str, list[int]]], labels: dict[str, dict[int, int]], k: int = K
+) -> pd.DataFrame:
+    """Kiểm chéo bằng nhãn tay: trong top-k của mỗi cách, xét các cặp đã có nhãn.
+
+    Nhãn tay chỉ phủ một mẫu nhỏ, nên không tính được recall; chỉ đo tỷ lệ phù hợp của các cặp có nhãn.
+    """
+    systems = sorted({s for per_cv in rankings.values() for s in per_cv})
+    rows = []
+    for system in systems:
+        grades = [
+            labels[cv][pid]
+            for cv, per_cv in rankings.items()
+            for pid in per_cv[system][:k]
+            if pid in labels.get(cv, {})
+        ]
+        n = len(grades)
+        rows.append(
+            {
+                "system": system,
+                "n_labeled": n,
+                "mean_grade": float(np.mean(grades)) if n else None,
+                "share_relevant": sum(g >= 2 for g in grades) / n if n else None,
+                "share_partly": sum(g >= 1 for g in grades) / n if n else None,
+            }
+        )
+    return pd.DataFrame(rows)
