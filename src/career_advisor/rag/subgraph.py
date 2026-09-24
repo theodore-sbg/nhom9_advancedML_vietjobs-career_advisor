@@ -125,6 +125,13 @@ def _best_paid_titles(G: nx.DiGraph, category: str) -> Fact | None:
     )
 
 
+def group_node(linked: LinkedEntities) -> str | None:
+    """Nhóm để tính kỹ năng và lương: chức danh nếu có, không thì nhóm ngành."""
+    if linked.titles:
+        return q.title_id(linked.titles[0])
+    return q.category_id(linked.categories[0]) if linked.categories else None
+
+
 def retrieve_facts(G: nx.DiGraph, linked: LinkedEntities) -> list[Fact]:
     if linked.foreign or linked.other_years:
         reason = (
@@ -138,13 +145,7 @@ def retrieve_facts(G: nx.DiGraph, linked: LinkedEntities) -> list[Fact]:
             )
         ]
 
-    group = (
-        q.title_id(linked.titles[0])
-        if linked.titles
-        else q.category_id(linked.categories[0])
-        if linked.categories
-        else None
-    )
+    group = group_node(linked)
     filters = [q.province_id(p) for p in linked.provinces[:1]]
     filters += [q.experience_id(e) for e in linked.experience_levels[:1]]
     facts: list[Fact] = []
@@ -183,17 +184,20 @@ def retrieve_facts(G: nx.DiGraph, linked: LinkedEntities) -> list[Fact]:
         facts += [fact] if fact else []
 
     for skill in linked.skills[:MAX_LINKED_SKILLS]:
-        related = q.related_skills(G, skill, k=TOP_RELATED)
-        if related:
-            listing = ", ".join(f"{r.skill} ({r.count} tin)" for r in related)
-            both = q.matching_postings(G, q.skill_id(skill), q.skill_id(related[0].skill))
-            sources = sorted(both)[:EVIDENCE]
-            facts.append(
-                Fact(
-                    "related_skills",
-                    f"Kỹ năng hay đi cùng {skill}: {listing}.",
-                    [r.count for r in related],
-                    sources,
-                )
-            )
+        fact = related_fact(G, skill)
+        facts += [fact] if fact else []
     return facts
+
+
+def related_fact(G: nx.DiGraph, skill: str) -> Fact | None:
+    related = q.related_skills(G, skill, k=TOP_RELATED)
+    if not related:
+        return None
+    listing = ", ".join(f"{r.skill} ({r.count} tin)" for r in related)
+    both = q.matching_postings(G, q.skill_id(skill), q.skill_id(related[0].skill))
+    return Fact(
+        "related_skills",
+        f"Kỹ năng hay đi cùng {skill}: {listing}.",
+        [r.count for r in related],
+        sorted(both)[:EVIDENCE],
+    )

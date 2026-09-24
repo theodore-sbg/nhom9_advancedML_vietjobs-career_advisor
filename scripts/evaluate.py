@@ -5,6 +5,7 @@ python scripts/evaluate.py entity-resolution   # 4 hệ gộp tên, chỉ số t
 python scripts/evaluate.py retrieval           # 5 cách truy xuất CV → tin, LLM chấm độ phù hợp
 python scripts/evaluate.py kappa               # độ khớp giữa điểm LLM và nhãn tay (người, Claude)
 python scripts/evaluate.py kg-rag              # KG-RAG so với vector RAG trên bộ 50 câu hỏi
+python scripts/evaluate.py ablation            # 1 agent so với 4 agent, có và không có gộp tên kỹ năng
 """
 
 import json
@@ -250,6 +251,158 @@ def kg_rag() -> None:
     )
 
 
+def _load_graph(name: str):
+    import pickle
+
+    with (PROCESSED_DIR / name).open("rb") as f:
+        return pickle.load(f)
+
+
+def _agent_record(result) -> dict:
+    return {
+        "verified": result.verification.ok,
+        "attempts": result.attempts,
+        "fallback": result.fallback,
+        "llm_calls": result.llm_calls,
+        "seconds": round(result.seconds, 2),
+    }
+
+
+def _qa_ablation(agents: dict) -> tuple[pd.DataFrame, list[dict]]:
+    from career_advisor.evaluation.qa_eval import aggregate, score_answer
+
+    rows = []
+    for q in load_questions():
+        for name, agent in agents.items():
+            result = agent.run(question=q["question"])
+            ans = result.answer
+            record = {"text": ans.text, "refuse": ans.refuse, "citations": ans.citations}
+            record["allowed_ids"] = ans.allowed_ids
+            rows.append(
+                {
+                    "part": "qa",
+                    "id": q["id"],
+                    "system": name,
+                    "group": q["group"],
+                    "split": q["split"],
+                    **record,
+                    **score_answer(q, record),
+                    **_agent_record(result),
+                }
+            )
+        print(f"  {q['id']} xong", flush=True)
+    frame = pd.DataFrame(rows)
+    tables = []
+    for (split, _, _), g in frame.groupby(["split", "system", "group"]):
+        base = aggregate(g.to_dict("records")).iloc[0].to_dict()
+        base |= {
+            "split": split,
+            "verified_rate": float(g["verified"].mean()),
+            "fallback_rate": float(g["fallback"].mean()),
+            "mean_llm_calls": float(g["llm_calls"].mean()),
+        }
+        tables.append(base)
+    return pd.DataFrame(tables), rows
+
+
+def _cv_ablation(agents: dict, G) -> tuple[pd.DataFrame, list[dict]]:
+    from career_advisor.evaluation.agent_eval import dominant_category, mentioned_share
+    from career_advisor.graph import query as gq
+    from career_advisor.rag.subgraph import group_node
+
+    # Chỉ CV test: CV dev đã dùng để chỉnh prompt lộ trình.
+    cvs = [json.loads(line) for line in (EVAL_DIR / "cvs" / "cvs.jsonl").read_text("utf-8").splitlines()]
+    cvs = [cv for cv in cvs if cv["split"] == "test"]
+    rows = []
+    for cv in cvs:
+        for name, agent in agents.items():
+            result = agent.run(cv_text=cv["text"])
+            ans = result.answer
+            group = group_node(ans.linked)
+            missing = [s.skill for s in gq.missing_skills(G, ans.linked.skills, group, k=3)] if group else []
+            rows.append(
+                {
+                    "part": "cv",
+                    "id": cv["id"],
+                    "system": name,
+                    "split": cv["split"],
+                    "text": ans.text,
+                    "refuse": ans.refuse,
+                    "citations": ans.citations,
+                    "target": group,
+                    "linked_skills": len(ans.linked.skills),
+                    "category_match": bool(group) and dominant_category(G, group) == cv["category"],
+                    "missing_mentioned": mentioned_share(ans.text, missing),
+                    "grounded": (
+                        len(set(ans.citations) & set(ans.allowed_ids)) / len(ans.citations)
+                        if ans.citations
+                        else None
+                    ),
+                    **_agent_record(result),
+                }
+            )
+        print(f"  {cv['id']} xong", flush=True)
+    frame = pd.DataFrame(rows)
+    table = (
+        frame.groupby(["split", "system"])
+        .agg(
+            n=("id", "size"),
+            category_match=("category_match", "mean"),
+            mean_linked_skills=("linked_skills", "mean"),
+            missing_mentioned=("missing_mentioned", "mean"),
+            citation_grounded=("grounded", "mean"),
+            refusal_rate=("refuse", "mean"),
+            verified_rate=("verified", "mean"),
+            fallback_rate=("fallback", "mean"),
+            mean_llm_calls=("llm_calls", "mean"),
+            mean_seconds=("seconds", "mean"),
+        )
+        .reset_index()
+    )
+    return table, rows
+
+
+def ablation() -> None:
+    from career_advisor.agents.workflow import MultiAgent, SingleAgent
+
+    graph, no_resolution = _load_graph("graph.pkl"), _load_graph("graph_no_resolution.pkl")
+    client = make_client()
+    single, multi = SingleAgent(client, graph), MultiAgent(client, graph)
+
+    print("Hỏi đáp: 1 agent, 4 agent, 4 agent trên đồ thị không gộp tên")
+    qa_table, qa_rows = _qa_ablation(
+        {
+            "single_agent": single,
+            "multi_agent": multi,
+            "multi_agent_no_resolution": MultiAgent(client, no_resolution),
+        }
+    )
+    print(qa_table.round(3).to_string(index=False))
+    print("Lộ trình từ CV: 1 agent, 4 agent")
+    cv_table, cv_rows = _cv_ablation({"single_agent": single, "multi_agent": multi}, graph)
+    print(cv_table.round(3).to_string(index=False))
+
+    vector = json.loads((RESULTS / "qa_kg_vs_vector.json").read_text())
+    result = {
+        **_meta(client),
+        "llm_calls_uncached": client.calls,
+        "kg_vs_vector": {"source": "qa_kg_vs_vector.json", "rows": vector["rows"]},
+        "single_vs_multi_agent": {
+            "qa": qa_table[qa_table["system"] != "multi_agent_no_resolution"].to_dict("records"),
+            "cv_plan": cv_table.to_dict("records"),
+        },
+        "resolution": {
+            "qa": qa_table[qa_table["system"] != "single_agent"].to_dict("records"),
+            "note": "multi_agent: graph.pkl (có gộp tên); multi_agent_no_resolution: graph_no_resolution.pkl",
+        },
+    }
+    (RESULTS / "ablation.json").write_text(json.dumps(result, ensure_ascii=False, indent=2, default=float))
+    (RESULTS / "ablation_answers.jsonl").write_text(
+        "".join(json.dumps(r, ensure_ascii=False, default=str) + "\n" for r in qa_rows + cv_rows),
+        encoding="utf-8",
+    )
+
+
 if __name__ == "__main__":
     RESULTS.mkdir(parents=True, exist_ok=True)
     commands = {
@@ -258,5 +411,6 @@ if __name__ == "__main__":
         "retrieval": retrieval,
         "kappa": kappa,
         "kg-rag": kg_rag,
+        "ablation": ablation,
     }
     commands[sys.argv[1]]()

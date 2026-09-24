@@ -68,13 +68,15 @@ def read_answer(text: str) -> tuple[str, bool, list[int]]:
 
 
 def answer_from_facts(
-    client, question: str, facts: list[Fact], linked: LinkedEntities | None = None
+    client, question: str, facts: list[Fact], linked: LinkedEntities | None = None, prompt: str | None = None
 ) -> Answer:
+    """`prompt` thay cho prompt hỏi đáp mặc định (Planner dùng để viết lộ trình hoặc viết lại)."""
     usable = [f for f in facts if f.kind != "out_of_scope"]
     if not usable:
         text = next((f.text for f in facts if f.kind == "out_of_scope"), NO_DATA)
         return Answer(text, True, [], facts, linked, llm_called=False)
-    raw = client.complete(build_prompt(question, facts), system=SYSTEM, json_output=True)
+    prompt = prompt or build_prompt(question, facts)
+    raw = client.complete(prompt, system=SYSTEM, json_output=True)
     text, refuse, citations = read_answer(raw)
     allowed = sorted({pid for f in facts for pid in f.sources})
     return Answer(text, refuse, citations, facts, linked, llm_called=True, allowed_ids=allowed)
