@@ -109,3 +109,13 @@ def test_cooccur_answer_for_a_skill_that_never_appears_with_others():
     ans = qs.cooccur_answer(skills, "lẻ loi")
 
     assert ans["skill"] is None and not ans["unique_top"]
+
+
+def test_experience_levels_are_written_in_natural_vietnamese():
+    assert qs.EXPERIENCE_TEXT == {
+        "none": "không yêu cầu kinh nghiệm",
+        "under_1y": "dưới 1 năm kinh nghiệm",
+        "1_2y": "1–2 năm kinh nghiệm",
+        "3_4y": "3–4 năm kinh nghiệm",
+        "5y_plus": "từ 5 năm kinh nghiệm",
+    }

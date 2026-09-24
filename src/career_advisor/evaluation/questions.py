@@ -49,6 +49,13 @@ GROUP_OF = {
 # Nghề không có trong dữ liệu (đã kiểm không trùng chức danh nào khi sinh câu hỏi).
 UNKNOWN_TITLES = ("phi công", "nhà du hành vũ trụ", "thợ lặn biển sâu", "bác sĩ phẫu thuật tim")
 FOREIGN_PLACES = ("Nhật Bản", "Singapore", "Đức")
+EXPERIENCE_TEXT = {
+    "none": "không yêu cầu kinh nghiệm",
+    "under_1y": "dưới 1 năm kinh nghiệm",
+    "1_2y": "1–2 năm kinh nghiệm",
+    "3_4y": "3–4 năm kinh nghiệm",
+    "5y_plus": "từ 5 năm kinh nghiệm",
+}
 
 
 def small_counts() -> dict[str, int]:
@@ -278,8 +285,7 @@ def build_question_set(
     for t, p, e in pick(three, counts["salary_3way"]):
         add(
             "salary_3way",
-            f"Làm {display[t]} ở {_place(p)} với mức kinh nghiệm {e.replace('_', ' ')}, "
-            f"lương trung vị là bao nhiêu?",
+            f"Làm {display[t]} ở {_place(p)} với {EXPERIENCE_TEXT[e]}, lương trung vị là bao nhiêu?",
             {"title": t, "province": p, "experience_level": e},
             salary_answer(postings, job_title_node=t, province=p, experience_level=e),
         )
