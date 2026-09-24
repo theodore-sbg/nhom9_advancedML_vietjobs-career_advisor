@@ -2,6 +2,8 @@
 
 python scripts/evaluate.py er-thresholds       # chọn ngưỡng gộp tên trên phần dev
 python scripts/evaluate.py entity-resolution   # 4 hệ gộp tên, chỉ số trên dev và test
+python scripts/evaluate.py retrieval           # 5 cách truy xuất CV → tin, LLM chấm độ phù hợp
+python scripts/evaluate.py kappa               # độ khớp giữa điểm LLM và nhãn tay (người, Claude)
 """
 
 import json
@@ -88,10 +90,55 @@ def entity_resolution() -> None:
 
 RELEVANCE_LLM = EVAL_DIR / "labels" / "relevance_llm.csv"
 RELEVANCE_HUMAN = EVAL_DIR / "labels" / "relevance_human.csv"
+# Nhãn do Claude gán khi người dùng chưa gán kịp. Báo riêng, không bao giờ gộp vào nhãn người.
+RELEVANCE_CLAUDE = EVAL_DIR / "labels" / "relevance_claude.csv"
+ANNOTATORS = {"human": RELEVANCE_HUMAN, "claude": RELEVANCE_CLAUDE}
+
+
+def _agreement(llm: pd.DataFrame) -> dict:
+    """κ giữa điểm LLM và từng bộ nhãn tay (người, Claude), kèm ma trận nhầm lẫn."""
+    from career_advisor.evaluation.metrics import cohen_kappa
+
+    out = {}
+    for name, path in ANNOTATORS.items():
+        if not path.exists():
+            continue
+        labels = pd.read_csv(path, dtype={"label": str}, keep_default_na=False)
+        labels = labels[labels["label"].isin(["0", "1", "2"])]
+        both = labels.merge(llm.dropna(subset=["grade"]), on=["cv_id", "posting_id"])
+        if both.empty:
+            continue
+        a, b = both["label"].astype(int).tolist(), both["grade"].astype(int).tolist()
+        confusion = pd.crosstab(pd.Series(a, name=name), pd.Series(b, name="llm"))
+        out[f"{name}_vs_llm"] = {
+            "n": len(both),
+            "unweighted": cohen_kappa(a, b),
+            "linear": cohen_kappa(a, b, "linear"),
+            "exact_agreement": float((pd.Series(a) == pd.Series(b)).mean()),
+            "confusion": {
+                str(k): {str(c): int(v) for c, v in row.items()} for k, row in confusion.iterrows()
+            },
+        }
+    return out
+
+
+def kappa() -> None:
+    result = _agreement(pd.read_csv(RELEVANCE_LLM))
+    for name, stats in result.items():
+        print(
+            f"{name}: n={stats['n']}, κ={stats['unweighted']:.3f}, κ tuyến tính={stats['linear']:.3f}, "
+            f"trùng khớp={stats['exact_agreement']:.1%}"
+        )
+        print("  ma trận (hàng: nhãn tay, cột: LLM):", stats["confusion"])
+    path = RESULTS / "retrieval.json"
+    if path.exists():
+        saved = json.loads(path.read_text())
+        saved.pop("kappa", None)
+        saved["agreement"] = result
+        path.write_text(json.dumps(saved, ensure_ascii=False, indent=2))
 
 
 def retrieval() -> None:
-    from career_advisor.evaluation.metrics import cohen_kappa
     from career_advisor.evaluation.relevance import judge_relevance, posting_summary
     from career_advisor.evaluation.retrieval_eval import K, pool, score_systems
     from career_advisor.retrieval.factory import build_searchers, load_resources
@@ -133,23 +180,16 @@ def retrieval() -> None:
     print(table.round(3).to_string(index=False))
 
     result = {**_meta(client), "k": K, "n_pairs_judged": total, "rows": table.to_dict("records")}
-    if RELEVANCE_HUMAN.exists():
-        human = pd.read_csv(RELEVANCE_HUMAN, dtype={"label": str}, keep_default_na=False)
-        human = human[human["label"].isin(["0", "1", "2"])]
-        llm = pd.DataFrame(rows, columns=["cv_id", "posting_id", "grade"]).dropna()
-        both = human.merge(llm, on=["cv_id", "posting_id"])
-        a, b = both["label"].astype(int).tolist(), both["grade"].astype(int).tolist()
-        result["kappa"] = {
-            "n": len(both),
-            "unweighted": cohen_kappa(a, b),
-            "linear": cohen_kappa(a, b, "linear"),
-        }
-        print("Độ khớp LLM–người:", result["kappa"])
+    result["agreement"] = _agreement(pd.DataFrame(rows, columns=["cv_id", "posting_id", "grade"]))
     (RESULTS / "retrieval.json").write_text(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
     RESULTS.mkdir(parents=True, exist_ok=True)
-    {"er-thresholds": er_thresholds, "entity-resolution": entity_resolution, "retrieval": retrieval}[
-        sys.argv[1]
-    ]()
+    commands = {
+        "er-thresholds": er_thresholds,
+        "entity-resolution": entity_resolution,
+        "retrieval": retrieval,
+        "kappa": kappa,
+    }
+    commands[sys.argv[1]]()
