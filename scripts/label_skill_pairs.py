@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 
 from career_advisor.config import EVAL_DIR, PROCESSED_DIR
+from career_advisor.evaluation.cli import read_key
 from career_advisor.evaluation.skill_pairs import (
     build_label_sheet,
     load_sheet,
@@ -46,21 +47,6 @@ def make() -> None:
     SHEET.parent.mkdir(parents=True, exist_ok=True)
     save_sheet(sheet, SHEET)
     print(f"Đã tạo {len(sheet)} cặp:", sheet["stratum"].value_counts().sort_index().to_dict())
-
-
-def read_key() -> str:
-    if not sys.stdin.isatty():
-        return sys.stdin.readline().strip()[:1].lower()
-    import termios
-    import tty
-
-    fd = sys.stdin.fileno()
-    old = termios.tcgetattr(fd)
-    try:
-        tty.setraw(fd)
-        return sys.stdin.read(1).lower()
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
 
 def context() -> tuple[dict[str, int], dict[str, list[str]]]:

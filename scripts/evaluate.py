@@ -86,6 +86,70 @@ def entity_resolution() -> None:
     (RESULTS / "entity_resolution.json").write_text(json.dumps(result, ensure_ascii=False, indent=2))
 
 
+RELEVANCE_LLM = EVAL_DIR / "labels" / "relevance_llm.csv"
+RELEVANCE_HUMAN = EVAL_DIR / "labels" / "relevance_human.csv"
+
+
+def retrieval() -> None:
+    from career_advisor.evaluation.metrics import cohen_kappa
+    from career_advisor.evaluation.relevance import judge_relevance, posting_summary
+    from career_advisor.evaluation.retrieval_eval import K, pool, score_systems
+    from career_advisor.retrieval.factory import build_searchers, load_resources
+
+    cvs = [
+        json.loads(line) for line in (EVAL_DIR / "cvs" / "cvs.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    resources = load_resources()
+    searchers = build_searchers(resources)
+    rankings = {
+        cv["id"]: {
+            name: s.search(cv["text"], k=K)["posting_id"].astype(int).tolist()
+            for name, s in searchers.items()
+        }
+        for cv in cvs
+    }
+    (RESULTS / "retrieval_rankings.json").write_text(json.dumps(rankings, indent=1))
+
+    postings, skills = resources["postings"], resources["skills"]
+    skills_of = skills.groupby("posting_id")["skill"].apply(list)
+    pools = pool(rankings)
+    client = make_client()
+    total = sum(len(v) for v in pools.values())
+    print(f"Chấm {total} cặp CV–tin bằng {client.model}", flush=True)
+    rows, grades = [], {}
+    for cv in cvs:
+        items = [(pid, posting_summary(postings.loc[pid], skills_of.get(pid, []))) for pid in pools[cv["id"]]]
+        grades[cv["id"]] = judge_relevance(client, cv["text"], items)
+        rows += [(cv["id"], pid, g) for pid, g in grades[cv["id"]].items()]
+        print(f"  {cv['id']}: {len(items)} tin, lượt gọi thật {client.calls}", flush=True)
+    pd.DataFrame(rows, columns=["cv_id", "posting_id", "grade"]).to_csv(RELEVANCE_LLM, index=False)
+
+    split_of = {cv["id"]: cv["split"] for cv in cvs}
+    tables = []
+    for split in ("dev", "test"):
+        subset = {cv: r for cv, r in rankings.items() if split_of[cv] == split}
+        tables.append(score_systems(subset, grades).assign(split=split))
+    table = pd.concat(tables, ignore_index=True)
+    print(table.round(3).to_string(index=False))
+
+    result = {**_meta(client), "k": K, "n_pairs_judged": total, "rows": table.to_dict("records")}
+    if RELEVANCE_HUMAN.exists():
+        human = pd.read_csv(RELEVANCE_HUMAN, dtype={"label": str}, keep_default_na=False)
+        human = human[human["label"].isin(["0", "1", "2"])]
+        llm = pd.DataFrame(rows, columns=["cv_id", "posting_id", "grade"]).dropna()
+        both = human.merge(llm, on=["cv_id", "posting_id"])
+        a, b = both["label"].astype(int).tolist(), both["grade"].astype(int).tolist()
+        result["kappa"] = {
+            "n": len(both),
+            "unweighted": cohen_kappa(a, b),
+            "linear": cohen_kappa(a, b, "linear"),
+        }
+        print("Độ khớp LLM–người:", result["kappa"])
+    (RESULTS / "retrieval.json").write_text(json.dumps(result, ensure_ascii=False, indent=2))
+
+
 if __name__ == "__main__":
     RESULTS.mkdir(parents=True, exist_ok=True)
-    {"er-thresholds": er_thresholds, "entity-resolution": entity_resolution}[sys.argv[1]]()
+    {"er-thresholds": er_thresholds, "entity-resolution": entity_resolution, "retrieval": retrieval}[
+        sys.argv[1]
+    ]()
