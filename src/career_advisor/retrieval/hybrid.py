@@ -23,6 +23,9 @@ MAX_SKILL_WORDS = 5
 # Tên kỹ năng quá ngắn dễ khớp nhầm với chữ thường ("ai" nghĩa là "người nào", "c", "r").
 MIN_SKILL_CHARS = 3
 
+# Cụm chứa từ nối là danh sách nhiều kỹ năng ("cẩn thận và trung thực"), không phải một kỹ năng.
+CONJUNCTIONS = frozenset({"và", "hoặc", "hay"})
+
 _WORD = re.compile(r"\w+")
 
 
@@ -56,6 +59,8 @@ def extract_skills(G: nx.DiGraph, text: str, max_words: int = MAX_SKILL_WORDS) -
     matches = []  # (đầu, cuối, cụm, kỹ năng)
     for i in range(len(words)):
         for n in range(1, min(max_words, len(words) - i) + 1):
+            if CONJUNCTIONS & set(words[i : i + n]):
+                break
             phrase = " ".join(words[i : i + n])
             skill = resolve_skill(G, phrase)
             if skill and len(skill) >= MIN_SKILL_CHARS:

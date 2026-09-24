@@ -219,7 +219,7 @@ def _build_lookup() -> dict[str, str]:
 PLACE_TO_PROVINCE = _build_lookup()
 
 
-def _province_of(token: str) -> str | None:
+def province_of(token: str) -> str | None:
     key = _key(token)
     if key in PLACE_TO_PROVINCE:
         return PLACE_TO_PROVINCE[key]
@@ -239,7 +239,7 @@ def normalize_location(raw: str | None) -> list[str]:
     text = re.sub(r"[\[\]'\"]", "", raw)
     found: list[str] = []
     for token in _SEPARATORS.split(text):
-        province = _province_of(token) if token.strip() else None
+        province = province_of(token) if token.strip() else None
         if province and province not in found:
             found.append(province)
     return found or [UNKNOWN]

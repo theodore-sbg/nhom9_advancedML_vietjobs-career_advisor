@@ -85,7 +85,8 @@ def _graph(extra_merges=(), extra_mentions=()):
         columns=["posting_id", "skill"],
     )
     merges = pd.DataFrame(
-        {"skill": ["phần mềm misa"], "canonical": ["misa"], "tier": ["llm"], "score": [0.9]}
+        [("phần mềm misa", "misa", "llm", 0.9), *extra_merges],
+        columns=["skill", "canonical", "tier", "score"],
     )
     skill_map = pd.DataFrame(
         {
@@ -125,3 +126,14 @@ def test_extract_skills_drops_a_fragment_of_a_longer_matched_skill():
     G = _graph(extra_mentions=[(3, "lập"), (3, "lập trình")])
 
     assert extract_skills(G, "Có kinh nghiệm lập trình Python") == {"lập trình", "python"}
+
+
+def test_extract_skills_ignores_phrases_joined_by_a_conjunction():
+    # Chuỗi ghép "excel và misa" trong dữ liệu gốc đã bị gộp vào "misa phần mềm".
+    # Không được vì thế mà mất "misa".
+    G = _graph(
+        extra_merges=[("excel và misa", "misa phần mềm", "embedding", 0.9)],
+        extra_mentions=[(0, "misa phần mềm"), (1, "misa phần mềm")],
+    )
+
+    assert extract_skills(G, "Tôi biết excel và misa") == {"excel", "misa"}
