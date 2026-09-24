@@ -34,12 +34,20 @@ MAX_SOURCE_CHARS = 2500
 SYSTEM = "Bạn kiểm tra dữ liệu tin tuyển dụng. Chỉ trả JSON."
 RULES = """Dưới đây là một tin tuyển dụng gốc và các trường đã được trích tự động từ tin đó.
 Với từng trường, cho biết giá trị đã trích có đúng với tin gốc không:
-- "đúng": khớp với tin gốc (được phép viết gọn hoặc chuẩn hoá, ví dụ "MS Excel → excel").
-- "sai": có chỗ trái với tin gốc, bịa thêm, hoặc bỏ sót điều quan trọng tin gốc ghi rõ.
+- "đúng": khớp với tin gốc theo các quy ước bên dưới.
+- "sai": có chỗ trái với tin gốc, bịa thêm, hoặc bỏ sót điều chính mà tin gốc ghi rõ.
 - "không rõ": tin gốc không đủ thông tin để kiểm.
-Kỹ năng: sai nếu có kỹ năng không liên quan tới tin, hoặc bị gộp sai nghĩa. Lương "thoả thuận" là đúng nếu tin
-không ghi mức lương cụ thể. Bằng cấp là bậc thấp nhất tin chấp nhận.
-Trả về JSON: {"skills": "...", "salary": "...", "experience": "...", "education": "..."}"""
+
+Quy ước của dữ liệu (làm theo quy ước thì là đúng, không phải lỗi):
+- Lương: phần đầu tin ghi "0.0 triệu" nghĩa là tin không ghi lương, nên trích thành "thoả thuận" là đúng.
+- Kinh nghiệm: quy ra số tháng rồi xếp nhóm: không yêu cầu (0 tháng), dưới 1 năm (1–11 tháng), 1–2 năm
+  (12–24 tháng), 3–4 năm (25–48 tháng), từ 5 năm (trên 48 tháng). Ví dụ "1 năm" → "12 tháng (1–2 năm kinh
+  nghiệm)" là đúng. Tin ghi một khoảng ("2-3 năm") thì lấy số nhỏ.
+- Bằng cấp: lấy bậc thấp nhất tin chấp nhận ("Cao đẳng trở lên" → cao đẳng). Không xét chuyên ngành.
+- Kỹ năng: tên được viết thường và gộp tên đồng nghĩa ("MS Excel → excel"), kỹ năng mềm vẫn giữ. Chỉ sai khi
+  có kỹ năng không có trong tin, gộp sang tên mang nghĩa khác, hoặc bỏ sót kỹ năng chính tin ghi rõ.
+Nếu có trường "sai", ghi lý do ngắn vào "ly_do".
+Trả về JSON: {"skills": "...", "salary": "...", "experience": "...", "education": "...", "ly_do": "..."}"""
 
 
 def sample_ids(index: pd.Index, n: int, seed: int = SEED) -> list[int]:
@@ -107,6 +115,14 @@ def parse_judgement(text: str) -> dict[str, str | None]:
     if not isinstance(data, dict):
         data = {}
     return {f: VERDICTS.get(str(data.get(f, "")).strip().lower()) for f in FIELDS}
+
+
+def parse_reason(text: str) -> str:
+    try:
+        data = json.loads(extract_json(text))
+    except (ValueError, TypeError):
+        return ""
+    return str(data.get("ly_do", "")).strip() if isinstance(data, dict) else ""
 
 
 def error_rates(labels: pd.DataFrame, fields=FIELDS) -> dict[str, dict]:

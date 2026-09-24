@@ -1,0 +1,31 @@
+{
+  "date": "2026-09-24",
+  "commit": "e5e58c8",
+  "llm": "ollama:qwen3.5:9b",
+  "n_llm": 200,
+  "llm_unparsed": 38,
+  "llm_error_rates": {
+    "skills": {
+      "n": 161,
+      "wrong": 97,
+      "error_rate": 0.6024844720496895
+    },
+    "salary": {
+      "n": 161,
+      "wrong": 2,
+      "error_rate": 0.012422360248447204
+    },
+    "experience": {
+      "n": 161,
+      "wrong": 28,
+      "error_rate": 0.17391304347826086
+    },
+    "education": {
+      "n": 161,
+      "wrong": 45,
+      "error_rate": 0.2795031055900621
+    }
+  },
+  "n_human": 0,
+  "llm_human_agreement": "chờ nhãn tay: scripts/label_data_quality.py"
+}

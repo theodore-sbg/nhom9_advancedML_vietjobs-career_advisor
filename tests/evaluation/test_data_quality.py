@@ -99,3 +99,16 @@ def test_agreement_uses_postings_both_judged_with_a_clear_verdict():
     assert result["skills"]["n"] == 3
     assert result["skills"]["agreement"] == pytest.approx(2 / 3)
     assert -1 <= result["skills"]["kappa"] <= 1
+
+
+def test_parse_reason_reads_the_reason_field():
+    from career_advisor.evaluation.data_quality import parse_reason
+
+    assert parse_reason(json.dumps({"skills": "sai", "ly_do": "có kỹ năng lạ"})) == "có kỹ năng lạ"
+    assert parse_reason("hỏng") == ""
+
+
+def test_rules_explain_the_data_conventions():
+    from career_advisor.evaluation.data_quality import RULES
+
+    assert "0.0 triệu" in RULES and "12 tháng" in RULES and "trở lên" in RULES and "ly_do" in RULES
