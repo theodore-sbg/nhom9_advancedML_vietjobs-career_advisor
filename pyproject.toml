@@ -15,6 +15,7 @@ dependencies = [
     "networkx>=3.2",
     "rank-bm25>=0.2",
     "langgraph>=1.0",
+    "torch>=2.2",
 ]
 
 [project.optional-dependencies]
