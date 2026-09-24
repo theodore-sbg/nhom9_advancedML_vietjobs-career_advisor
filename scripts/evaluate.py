@@ -7,6 +7,7 @@ python scripts/evaluate.py kappa               # độ khớp giữa điểm LLM
 python scripts/evaluate.py kg-rag              # KG-RAG so với vector RAG trên bộ 50 câu hỏi
 python scripts/evaluate.py ablation            # 1 agent so với 4 agent, có và không có gộp tên kỹ năng
 python scripts/evaluate.py latency             # thời gian trả lời của luồng 4 agent, không dùng cache
+python scripts/evaluate.py data-quality        # LLM kiểm 200 tin, và độ khớp với 50 tin người kiểm tay
 """
 
 import json
@@ -437,6 +438,66 @@ def latency() -> None:
     (RESULTS / "latency.json").write_text(json.dumps(result, ensure_ascii=False, indent=2))
 
 
+def data_quality() -> None:
+    from career_advisor.data import load_postings
+    from career_advisor.evaluation.data_quality import (
+        FIELDS,
+        SYSTEM,
+        agreement,
+        error_rates,
+        extracted_fields,
+        judge_prompt,
+        parse_judgement,
+        sample_ids,
+        source_text,
+    )
+
+    raw, postings = load_postings(), pd.read_parquet(PROCESSED_DIR / "postings.parquet")
+    skills = pd.read_parquet(PROCESSED_DIR / "stats" / "posting_skills.parquet")
+    ids = sample_ids(postings.index, 200)
+    client = make_client()
+    print(f"Tối đa {len(ids)} lượt LLM (có cache).", flush=True)
+    rows = []
+    for k, pid in enumerate(ids, 1):
+        fields = extracted_fields(postings.loc[pid], skills[skills["posting_id"] == pid])
+        reply = client.complete(
+            judge_prompt(source_text(raw.loc[pid]), fields), system=SYSTEM, json_output=True
+        )
+        rows.append({"posting_id": pid, **parse_judgement(reply)})
+        if k % 20 == 0:
+            print(f"  {k}/{len(ids)}", flush=True)
+    llm = pd.DataFrame(rows)
+    llm.to_csv(EVAL_DIR / "labels" / "data_quality_llm.csv", index=False)
+
+    result = {
+        **_meta(client),
+        "n_llm": len(llm),
+        "llm_unparsed": int(llm[list(FIELDS)].isna().all(axis=1).sum()),
+    }
+    result["llm_error_rates"] = error_rates(llm)
+    path = EVAL_DIR / "labels" / "data_quality.csv"
+    human = pd.read_csv(path, dtype=str, keep_default_na=False) if path.exists() else pd.DataFrame()
+    if len(human):
+        human = human[(human[list(FIELDS)] != "").all(axis=1)].assign(
+            posting_id=lambda d: d["posting_id"].astype(int)
+        )
+    result["n_human"] = len(human)
+    if len(human):
+        result["human_error_rates"] = error_rates(human)
+        result["llm_error_rates_on_human_sample"] = error_rates(
+            llm[llm["posting_id"].isin(human["posting_id"])]
+        )
+        result["llm_human_agreement"] = agreement(llm, human)
+    else:
+        result["llm_human_agreement"] = "chờ nhãn tay: scripts/label_data_quality.py"
+    print(
+        json.dumps(
+            {k: v for k, v in result.items() if k not in ("date", "commit")}, ensure_ascii=False, indent=1
+        )
+    )
+    (RESULTS / "data_quality.json").write_text(json.dumps(result, ensure_ascii=False, indent=2))
+
+
 if __name__ == "__main__":
     RESULTS.mkdir(parents=True, exist_ok=True)
     commands = {
@@ -447,5 +508,6 @@ if __name__ == "__main__":
         "kg-rag": kg_rag,
         "ablation": ablation,
         "latency": latency,
+        "data-quality": data_quality,
     }
     commands[sys.argv[1]]()
