@@ -32,8 +32,25 @@ def test_posting_summary_is_short_and_keeps_key_fields():
 
     text = posting_summary(row, ["misa", "excel"])
 
-    assert "Kế toán" in text and "misa, excel" in text and "Hà Nội" in text
+    assert "Kế toán" in text and "misa, excel" in text
     assert len(text) < 700
+
+
+def test_location_is_neither_shown_nor_judged():
+    from career_advisor.evaluation.relevance import RULES
+
+    row = pd.Series(
+        {
+            "job_title": "Kế toán",
+            "category": "tài_chính",
+            "provinces": ["hà nội"],
+            "requirements_text": "MISA",
+        }
+    )
+
+    # Độ phù hợp chỉ xét nghề nghiệp; nơi làm do bộ lọc tỉnh trên giao diện xử lý.
+    assert "Hà Nội" not in posting_summary(row, ["misa"])
+    assert "Không xét nơi làm" in RULES
 
 
 def _grader(grade_of):

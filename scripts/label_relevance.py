@@ -22,7 +22,7 @@ QUY TẮC (giống hệt quy tắc đưa cho LLM):
   2: đúng nghề hoặc lĩnh vực của ứng viên, và CV đáp ứng phần lớn yêu cầu chính
   1: cùng lĩnh vực nhưng lệch vai trò hoặc cấp độ, hoặc thiếu nhiều kỹ năng chính
   0: không phù hợp
-  Không xét giới tính, tuổi hay mức lương.
+  Không xét nơi làm, giới tính, tuổi hay mức lương: chỉ xét nghề nghiệp và kỹ năng.
 """
 
 
@@ -55,8 +55,7 @@ def label() -> None:
         i = int(empty[0])
         row, post = sheet.loc[i], postings.loc[int(sheet.loc[i, "posting_id"])]
         print(f"\n[{int((sheet['label'] != '').sum()) + 1}/{len(sheet)}]  CV: {cvs[row['cv_id']]}")
-        places = ", ".join(p.title() for p in post["provinces"])
-        print(f"  TIN #{row['posting_id']}: {post['job_title']} | {places}")
+        print(f"  TIN #{row['posting_id']}: {post['job_title']}")
         print(f"  Yêu cầu: {str(post['requirements_text'])[:MAX_REQUIREMENTS_CHARS]}")
         print("  2 / 1 / 0 / bỏ qua (s) / sửa cặp trước (u) / thoát (q)? ", end="", flush=True)
         key = read_key()

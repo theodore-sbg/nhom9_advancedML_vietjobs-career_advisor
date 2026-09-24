@@ -22,17 +22,18 @@ RULES = """Chấm từng tin tuyển dụng theo mức phù hợp với CV dư�
 - 2: phù hợp — đúng nghề hoặc lĩnh vực của ứng viên, và CV đáp ứng phần lớn yêu cầu chính.
 - 1: phù hợp một phần — cùng lĩnh vực nhưng lệch vai trò hoặc cấp độ, hoặc thiếu nhiều kỹ năng chính.
 - 0: không phù hợp.
-Không xét giới tính, tuổi hay mức lương.
+Không xét nơi làm, giới tính, tuổi hay mức lương: chỉ xét nghề nghiệp và kỹ năng.
 
 Trả về JSON dạng {"grades": [{"id": 1, "grade": 2}, {"id": 2, "grade": 0}, ...]}.
 """
 
 
 def posting_summary(row: pd.Series, skills: list[str]) -> str:
-    provinces = ", ".join(p.title() for p in row["provinces"])
+    """Tóm tắt tin để chấm. Không đưa nơi làm vào: độ phù hợp chỉ xét nghề nghiệp (phương án A đã chốt),
+    còn nơi làm do bộ lọc tỉnh trên giao diện xử lý."""
     requirements = str(row.get("requirements_text") or "")[:MAX_REQUIREMENTS_CHARS]
     return (
-        f"{row['job_title']} | ngành: {str(row['category']).replace('_', ' ')} | nơi làm: {provinces} | "
+        f"{row['job_title']} | ngành: {str(row['category']).replace('_', ' ')} | "
         f"kỹ năng: {', '.join(skills[:MAX_SKILLS])} | yêu cầu: {requirements}"
     )
 
