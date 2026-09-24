@@ -22,7 +22,9 @@ def _answer(salary, text):
 
 
 def test_faithful_answer_passes(facts, salary):
-    text = _answer(salary, "Lương trung vị là {median} triệu đồng/tháng [#{src}]. Bạn đã biết 2 phần mềm khác.")
+    text = _answer(
+        salary, "Lương trung vị là {median} triệu đồng/tháng [#{src}]. Bạn đã biết 2 phần mềm khác."
+    )
 
     result = verify(text, [salary.sources[0]], facts, QUESTION)
 
