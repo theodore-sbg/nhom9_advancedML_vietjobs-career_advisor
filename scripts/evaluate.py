@@ -4,6 +4,7 @@ python scripts/evaluate.py er-thresholds       # chọn ngưỡng gộp tên tr�
 python scripts/evaluate.py entity-resolution   # 4 hệ gộp tên, chỉ số trên dev và test
 python scripts/evaluate.py retrieval           # 5 cách truy xuất CV → tin, LLM chấm độ phù hợp
 python scripts/evaluate.py kappa               # độ khớp giữa điểm LLM và nhãn tay (người, Claude)
+python scripts/evaluate.py kg-rag              # KG-RAG so với vector RAG trên bộ 50 câu hỏi
 """
 
 import json
@@ -184,6 +185,71 @@ def retrieval() -> None:
     (RESULTS / "retrieval.json").write_text(json.dumps(result, ensure_ascii=False, indent=2))
 
 
+def load_questions() -> list[dict]:
+    path = EVAL_DIR / "questions" / "questions.jsonl"
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+
+def run_qa(systems: dict, out_name: str) -> None:
+    """Chạy mỗi hệ (tên → hàm câu hỏi → Answer) trên bộ câu hỏi, chấm và ghi kết quả."""
+    from career_advisor.evaluation.qa_eval import aggregate, score_answer
+
+    questions = load_questions()
+    rows, answers = [], []
+    for q in questions:
+        for name, ask in systems.items():
+            ans = ask(q["question"])
+            record = {
+                "text": ans.text,
+                "refuse": ans.refuse,
+                "citations": ans.citations,
+                "allowed_ids": ans.allowed_ids,
+            }
+            score = score_answer(q, record)
+            rows.append({"system": name, "group": q["group"], "split": q["split"], **score})
+            answers.append({"id": q["id"], "system": name, "question": q["question"], **record, **score})
+        print(f"  {q['id']} xong", flush=True)
+    (RESULTS / f"{out_name}_answers.jsonl").write_text(
+        "".join(json.dumps(a, ensure_ascii=False) + "\n" for a in answers), encoding="utf-8"
+    )
+    tables = []
+    for split in ("dev", "test"):
+        tables.append(aggregate([r for r in rows if r["split"] == split]).assign(split=split))
+    table = pd.concat(tables, ignore_index=True)
+    print(table.round(3).to_string(index=False))
+    client = make_client()
+    result = {**_meta(client), "rows": table.to_dict("records")}
+    (RESULTS / f"{out_name}.json").write_text(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+def kg_rag() -> None:
+    import pickle
+
+    import numpy as np
+
+    from career_advisor.embeddings import BgeM3Encoder
+    from career_advisor.rag.answer import answer_question
+    from career_advisor.rag.vector_rag import vector_answer
+    from career_advisor.retrieval.dense import DenseSearcher
+
+    with (PROCESSED_DIR / "graph.pkl").open("rb") as f:
+        graph = pickle.load(f)
+    postings = pd.read_parquet(PROCESSED_DIR / "postings.parquet")
+    skills = pd.read_parquet(PROCESSED_DIR / "stats" / "posting_skills.parquet")
+    skills_of = skills.groupby("posting_id")["skill"].apply(list).to_dict()
+    dense = DenseSearcher(
+        np.load(PROCESSED_DIR / "emb" / "postings.npy"), postings.index.to_numpy(), BgeM3Encoder()
+    )
+    client = make_client()
+    run_qa(
+        {
+            "kg_rag": lambda question: answer_question(client, graph, question),
+            "vector_rag": lambda question: vector_answer(client, dense, postings, skills_of, question),
+        },
+        "qa_kg_vs_vector",
+    )
+
+
 if __name__ == "__main__":
     RESULTS.mkdir(parents=True, exist_ok=True)
     commands = {
@@ -191,5 +257,6 @@ if __name__ == "__main__":
         "entity-resolution": entity_resolution,
         "retrieval": retrieval,
         "kappa": kappa,
+        "kg-rag": kg_rag,
     }
     commands[sys.argv[1]]()

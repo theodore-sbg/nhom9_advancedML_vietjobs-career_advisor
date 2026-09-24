@@ -16,6 +16,15 @@ def small_graph():
         rows.append(("tài_chính_kế_toán", ["hà nội"], salary, "1_2y", "kế toán tổng hợp"))
     for salary in (8, 9, 10, 11, 12, None):
         rows.append(("kinh_doanh_bán_hàng", ["hà nội"], salary, "none", "kinh doanh"))
+    # "văn phòng" là chức danh, nhưng cũng nằm trong kỹ năng "tin học văn phòng".
+    for salary in (8, 9):
+        rows.append(("nhân_sự_hành_chính", ["hà nội"], salary, "none", "văn phòng"))
+    for salary in (9, 10):
+        rows.append(("nhân_sự_hành_chính", ["hà nội"], salary, "none", "trợ lý"))
+    # Chức danh dài 5 chữ, viết kèm "Nhân viên" thành 7 chữ; "nhân viên" cũng là một chức danh chung.
+    rows.append(("kinh_doanh_bán_hàng", ["hà nội"], 9, "none", "kinh doanh tư vấn du lịch"))
+    rows.append(("kinh_doanh_bán_hàng", ["hà nội"], 9, "none", "nhân viên"))
+    rows.append(("nhân_sự_hành_chính", ["hà nội"], 9, "none", "tuyển dụng"))
     # Chức danh "kỹ thuật" nằm trong tên nhóm ngành "công nghệ thông tin kỹ thuật số".
     for salary in (20, 25):
         rows.append(("công_nghệ_thông_tin_kỹ_thuật_số", ["hà nội"], salary, "3_4y", "kỹ thuật"))
@@ -33,7 +42,10 @@ def small_graph():
         **{i: ["excel", "phần mềm kế toán", "cẩn thận"] for i in range(1, 10, 2)},
         **{i: ["giao tiếp", "đàm phán", "excel"] for i in range(10, 16)},
         # Node rác do dữ liệu gốc trích sai, trùng chữ thường gặp trong câu hỏi.
-        **{i: ["trung", "nhóm", "python"] for i in (16, 17)},
+        **{
+            i: ["trung", "nhóm", "python", "tin học văn phòng", "có kiến thức tốt về tài chính"]
+            for i in (16, 17)
+        },
     }
     mentions = pd.DataFrame(
         [(pid, s) for pid, ss in skills.items() for s in ss], columns=["posting_id", "skill"]

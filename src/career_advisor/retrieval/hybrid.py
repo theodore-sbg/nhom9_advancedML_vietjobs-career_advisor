@@ -19,7 +19,7 @@ from career_advisor.retrieval.lexical import _top_k
 
 K_RRF = 60
 DEPTH = 100
-MAX_SKILL_WORDS = 5
+MAX_SKILL_WORDS = 8  # có kỹ năng dài 7 chữ: "có kiến thức tốt về tài chính"
 # Tên kỹ năng quá ngắn dễ khớp nhầm với chữ thường ("ai" nghĩa là "người nào", "c", "r").
 MIN_SKILL_CHARS = 3
 

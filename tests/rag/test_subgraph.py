@@ -76,3 +76,12 @@ def test_skill_lists_mark_soft_skills(small_graph):
 
     assert "cẩn thận (" in top.text and "kỹ năng mềm" in top.text.split("cẩn thận (")[1].split(")")[0]
     assert "kỹ năng mềm" not in top.text.split("excel (")[1].split(")")[0]
+
+
+def test_skill_rate_fact_for_a_linked_skill_within_the_title(small_graph):
+    facts = _facts(small_graph, "Bao nhiêu phần trăm tin tuyển kế toán tổng hợp yêu cầu MISA?")
+    rate = next(f for f in facts if f.kind == "skill_rate")
+
+    # misa có ở 5 trong 10 tin kế toán tổng hợp.
+    assert 50.0 in rate.values and 5 in rate.values and 10 in rate.values
+    assert "50%" in rate.text and rate.sources

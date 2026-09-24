@@ -65,3 +65,36 @@ def test_category_phrase_is_fully_consumed_before_titles(small_graph):
 
     assert linked.categories == ["công_nghệ_thông_tin_kỹ_thuật_số"]
     assert linked.titles == []
+
+
+def test_title_after_a_cue_wins_over_a_title_hidden_in_a_skill(small_graph):
+    linked = link_entities(small_graph, "Tôi biết tin học văn phòng và excel, muốn làm trợ lý ở Hà Nội")
+
+    assert linked.titles == ["trợ lý"]
+    assert "tin học văn phòng" in linked.skills
+
+
+def test_question_starting_with_lam_is_a_title_cue(small_graph):
+    assert link_entities(small_graph, "Làm kế toán tổng hợp ở Bắc Ninh lương bao nhiêu?").titles == [
+        "kế toán tổng hợp"
+    ]
+
+
+def test_long_title_is_matched_whole(small_graph):
+    linked = link_entities(
+        small_graph, "Bao nhiêu phần trăm tin tuyển Nhân viên kinh doanh tư vấn du lịch yêu cầu excel?"
+    )
+
+    assert linked.titles == ["kinh doanh tư vấn du lịch"]
+
+
+def test_question_phrase_tin_tuyen_dung_is_not_a_title(small_graph):
+    linked = link_entities(small_graph, "Kỹ năng nào hay đi cùng excel nhất trong các tin tuyển dụng?")
+
+    assert linked.titles == [] and linked.skills == ["excel"]
+
+
+def test_long_skill_phrase_is_linked(small_graph):
+    linked = link_entities(small_graph, "Kỹ năng nào hay đi cùng có kiến thức tốt về tài chính nhất?")
+
+    assert "có kiến thức tốt về tài chính" in linked.skills

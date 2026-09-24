@@ -1,0 +1,115 @@
+{
+  "date": "2026-09-24",
+  "commit": "91d5138",
+  "llm": "ollama:qwen3.5:9b",
+  "rows": [
+    {
+      "system": "kg_rag",
+      "group": "multi_hop",
+      "n": 8,
+      "accuracy": 0.75,
+      "citation_precision": 0.47500000000000003,
+      "false_refusal_rate": 0.125,
+      "split": "dev"
+    },
+    {
+      "system": "kg_rag",
+      "group": "one_hop",
+      "n": 13,
+      "accuracy": 0.9230769230769231,
+      "citation_precision": 0.75,
+      "false_refusal_rate": 0.07692307692307693,
+      "split": "dev"
+    },
+    {
+      "system": "kg_rag",
+      "group": "out_of_scope",
+      "n": 5,
+      "accuracy": 1.0,
+      "citation_precision": NaN,
+      "false_refusal_rate": 0.0,
+      "split": "dev"
+    },
+    {
+      "system": "vector_rag",
+      "group": "multi_hop",
+      "n": 8,
+      "accuracy": 0.25,
+      "citation_precision": 0.38095238095238093,
+      "false_refusal_rate": 0.125,
+      "split": "dev"
+    },
+    {
+      "system": "vector_rag",
+      "group": "one_hop",
+      "n": 13,
+      "accuracy": 0.07692307692307693,
+      "citation_precision": 0.5885416666666667,
+      "false_refusal_rate": 0.38461538461538464,
+      "split": "dev"
+    },
+    {
+      "system": "vector_rag",
+      "group": "out_of_scope",
+      "n": 5,
+      "accuracy": 1.0,
+      "citation_precision": NaN,
+      "false_refusal_rate": 0.0,
+      "split": "dev"
+    },
+    {
+      "system": "kg_rag",
+      "group": "multi_hop",
+      "n": 7,
+      "accuracy": 1.0,
+      "citation_precision": 0.5931818181818181,
+      "false_refusal_rate": 0.0,
+      "split": "test"
+    },
+    {
+      "system": "kg_rag",
+      "group": "one_hop",
+      "n": 12,
+      "accuracy": 0.9166666666666666,
+      "citation_precision": 0.7272727272727273,
+      "false_refusal_rate": 0.08333333333333333,
+      "split": "test"
+    },
+    {
+      "system": "kg_rag",
+      "group": "out_of_scope",
+      "n": 5,
+      "accuracy": 1.0,
+      "citation_precision": NaN,
+      "false_refusal_rate": 0.0,
+      "split": "test"
+    },
+    {
+      "system": "vector_rag",
+      "group": "multi_hop",
+      "n": 7,
+      "accuracy": 0.0,
+      "citation_precision": 0.611111111111111,
+      "false_refusal_rate": 0.2857142857142857,
+      "split": "test"
+    },
+    {
+      "system": "vector_rag",
+      "group": "one_hop",
+      "n": 12,
+      "accuracy": 0.16666666666666666,
+      "citation_precision": 0.4583333333333333,
+      "false_refusal_rate": 0.25,
+      "split": "test"
+    },
+    {
+      "system": "vector_rag",
+      "group": "out_of_scope",
+      "n": 5,
+      "accuracy": 1.0,
+      "citation_precision": NaN,
+      "false_refusal_rate": 0.0,
+      "split": "test"
+    }
+  ]
+}

@@ -19,7 +19,7 @@ from career_advisor.cleaning.titles import normalize_title
 from career_advisor.retrieval.hybrid import extract_skills
 
 DATA_YEAR = 2025
-MAX_TITLE_WORDS = 6
+MAX_TITLE_WORDS = 8  # "Nhân viên kinh doanh tư vấn du lịch" có 7 chữ
 MAX_PLACE_WORDS = 4
 
 # Cụm từ của chính câu hỏi. Dữ liệu có node kỹ năng rác trùng chữ ("trung", "nhóm"), nên các cụm này
@@ -27,10 +27,13 @@ MAX_PLACE_WORDS = 4
 QUESTION_PHRASES = (
     "lương trung vị", "mức lương", "lương", "trung vị", "nhóm ngành", "ngành", "chức danh", "bao nhiêu",
     "kinh nghiệm", "tin tuyển dụng", "tin tuyển", "tuyển dụng", "kỹ năng", "còn thiếu", "quan trọng nhất",
-    "phần trăm", "hay đi cùng", "muốn làm", "tôi biết", "cao nhất", "khoảng",
+    "phần trăm", "hay đi cùng", "muốn làm", "tôi biết", "cao nhất", "khoảng", "trong các tin tuyển dụng",
 )  # fmt: skip
 
 _WORD = re.compile(r"\w+")
+# Từ báo hiệu chức danh. Chức danh sau từ này được ưu tiên, để chữ nằm trong tên kỹ năng
+# ("tin học văn phòng") không bị lấy làm chức danh ("văn phòng").
+_TITLE_CUE = re.compile(r"(?:muốn làm|vị trí|nghề|tin tuyển|^làm)\s+")
 _YEAR = re.compile(r"\b((?:19|20)\d{2})\b")
 _EXPERIENCE = (
     (re.compile(r"không yêu cầu kinh nghiệm|chưa có kinh nghiệm"), lambda m: 0),
@@ -113,11 +116,30 @@ def link_entities(G: nx.DiGraph, text: str) -> LinkedEntities:
             linked.categories.append(category)
             _mark(words, used, matched)
 
+    # Cụm câu hỏi nhiều chữ ("tin tuyển dụng", "lương trung vị") loại trước khi khớp chức danh, để
+    # "tin tuyển dụng" không thành chức danh "tuyển dụng". Chữ đơn ("ngành") loại sau, để không che
+    # chức danh như "kinh doanh" trong "ngành kinh doanh".
+    multiword = [p for p in QUESTION_PHRASES if " " in p]
+    for phrase in sorted(multiword, key=lambda p: -len(p)):
+        _mark(words, used, phrase)
+
     titles = _names(G, "JobTitle")
+
+    def title_of(span: str) -> str | None:
+        name = normalize_title(span)
+        return name if name in titles else None
+
     # Chức danh xét trước cụm từ câu hỏi: "kinh doanh" không bị che bởi "ngành".
-    title_spans = _match_spans(
-        words, used, MAX_TITLE_WORDS, lambda s: normalize_title(s) if normalize_title(s) in titles else None
-    )
+    title_spans = []
+    cue = _TITLE_CUE.search(norm)
+    if cue:
+        start = len(_WORD.findall(norm[: cue.end()]))
+        after_cue = [u or i < start for i, u in enumerate(used)]
+        title_spans = _match_spans(words, after_cue, MAX_TITLE_WORDS, title_of)
+        for i, j, _ in title_spans:
+            used[i:j] = [True] * (j - i)
+    if not title_spans:
+        title_spans = _match_spans(words, used, MAX_TITLE_WORDS, title_of)
     linked.titles = list(dict.fromkeys(t for _, _, t in title_spans))
 
     for phrase in sorted(QUESTION_PHRASES, key=lambda p: -len(p)):

@@ -157,6 +157,20 @@ def retrieve_facts(G: nx.DiGraph, linked: LinkedEntities) -> list[Fact]:
             G, "top_skills", f"Kỹ năng hay được yêu cầu nhất của {_scope_text(G, [group])}", top
         )
         facts += [fact] if fact else []
+        in_group = q.postings_of(G, group)
+        for skill in linked.skills[:MAX_LINKED_SKILLS]:
+            with_skill = in_group & q.postings_of(G, q.skill_id(skill))
+            if in_group:
+                rate = len(with_skill) / len(in_group)
+                facts.append(
+                    Fact(
+                        "skill_rate",
+                        f"{fmt_number(rate, pct=True)} tin tuyển {_scope_text(G, [group])} yêu cầu {skill} "
+                        f"({len(with_skill)}/{len(in_group)} tin).",
+                        [round(rate * 100, 1), len(with_skill), len(in_group)],
+                        sorted(with_skill)[:EVIDENCE],
+                    )
+                )
         if linked.skills:
             missing = q.missing_skills(G, linked.skills, group, k=TOP_MISSING)
             intro = (
