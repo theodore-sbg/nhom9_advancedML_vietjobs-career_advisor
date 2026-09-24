@@ -99,12 +99,14 @@ RELEVANCE_CLAUDE = EVAL_DIR / "labels" / "relevance_claude.csv"
 ANNOTATORS = {"human": RELEVANCE_HUMAN, "claude": RELEVANCE_CLAUDE}
 
 
-def _agreement(llm: pd.DataFrame) -> dict:
+def _agreement(llm: pd.DataFrame, annotators: dict | None = None) -> dict:
     """κ giữa điểm LLM và từng bộ nhãn tay (người, Claude), kèm ma trận nhầm lẫn."""
+    import numpy as np
+
     from career_advisor.evaluation.metrics import cohen_kappa
 
     out = {}
-    for name, path in ANNOTATORS.items():
+    for name, path in (annotators or ANNOTATORS).items():
         if not path.exists():
             continue
         labels = pd.read_csv(path, dtype={"label": str}, keep_default_na=False)
@@ -119,6 +121,14 @@ def _agreement(llm: pd.DataFrame) -> dict:
             "unweighted": cohen_kappa(a, b),
             "linear": cohen_kappa(a, b, "linear"),
             "exact_agreement": float((pd.Series(a) == pd.Series(b)).mean()),
+            # Recall@k và MRR coi "phù hợp" là điểm ≥ RELEVANT (2); nDCG dùng cả 3 mức.
+            "binary": {
+                f">={t}": {
+                    "kappa": cohen_kappa([int(x >= t) for x in a], [int(y >= t) for y in b]),
+                    "agreement": float(np.mean([(x >= t) == (y >= t) for x, y in zip(a, b, strict=True)])),
+                }
+                for t in (1, 2)
+            },
             "confusion": {
                 str(k): {str(c): int(v) for c, v in row.items()} for k, row in confusion.iterrows()
             },
@@ -128,6 +138,12 @@ def _agreement(llm: pd.DataFrame) -> dict:
 
 def kappa() -> None:
     result = _agreement(pd.read_csv(RELEVANCE_LLM))
+    # Người so với Claude: dùng nhãn Claude ở vị trí điểm LLM.
+    claude = pd.read_csv(ANNOTATORS["claude"], dtype={"label": str}, keep_default_na=False)
+    claude = claude[claude["label"].isin(["0", "1", "2"])].rename(columns={"label": "grade"})
+    human_only = {"human": ANNOTATORS["human"]}
+    for name, stats in _agreement(claude.astype({"grade": int}), human_only).items():
+        result[name.replace("_vs_llm", "_vs_claude")] = stats
     for name, stats in result.items():
         print(
             f"{name}: n={stats['n']}, κ={stats['unweighted']:.3f}, κ tuyến tính={stats['linear']:.3f}, "
@@ -448,9 +464,11 @@ def data_quality() -> None:
         extracted_fields,
         judge_prompt,
         parse_judgement,
+        parse_reason,
         sample_ids,
         source_text,
     )
+    from career_advisor.llm import LLMGenerationError
 
     raw, postings = load_postings(), pd.read_parquet(PROCESSED_DIR / "postings.parquet")
     skills = pd.read_parquet(PROCESSED_DIR / "stats" / "posting_skills.parquet")
@@ -460,10 +478,13 @@ def data_quality() -> None:
     rows = []
     for k, pid in enumerate(ids, 1):
         fields = extracted_fields(postings.loc[pid], skills[skills["posting_id"] == pid])
-        reply = client.complete(
-            judge_prompt(source_text(raw.loc[pid]), fields), system=SYSTEM, json_output=True
-        )
-        rows.append({"posting_id": pid, **parse_judgement(reply)})
+        try:
+            reply = client.complete(
+                judge_prompt(source_text(raw.loc[pid]), fields), system=SYSTEM, json_output=True
+            )
+        except LLMGenerationError as exc:  # Ollama dừng vì lặp chữ: ghi là không đọc được
+            reply = f"LLMGenerationError: {exc}"
+        rows.append({"posting_id": pid, **parse_judgement(reply), "reason": parse_reason(reply)})
         if k % 20 == 0:
             print(f"  {k}/{len(ids)}", flush=True)
     llm = pd.DataFrame(rows)
