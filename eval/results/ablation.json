@@ -1,8 +1,8 @@
 {
-  "date": "2026-09-24",
-  "commit": "4a2cb98",
+  "date": "2026-09-28",
+  "commit": "8924369",
   "llm": "ollama:qwen3.5:9b",
-  "llm_calls_uncached": 102,
+  "llm_calls_uncached": 0,
   "kg_vs_vector": {
     "source": "qa_kg_vs_vector.json",
     "rows": [
@@ -300,7 +300,7 @@
         "verified_rate": 1.0,
         "fallback_rate": 0.0,
         "mean_llm_calls": 2.0,
-        "mean_seconds": 35.533
+        "mean_seconds": 0.05800000000000001
       },
       {
         "split": "test",
@@ -314,7 +314,7 @@
         "verified_rate": 0.95,
         "fallback_rate": 0.0,
         "mean_llm_calls": 1.0,
-        "mean_seconds": 38.0755
+        "mean_seconds": 0.063
       }
     ]
   },
