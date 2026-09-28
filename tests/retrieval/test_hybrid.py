@@ -137,3 +137,15 @@ def test_extract_skills_ignores_phrases_joined_by_a_conjunction():
     )
 
     assert extract_skills(G, "Tôi biết excel và misa") == {"excel", "misa"}
+
+
+def test_graph_searcher_breaks_ties_by_posting_id_whatever_the_skill_order(monkeypatch):
+    # misa ở tin 0 và 1, python ở tin 3 và 4: cùng IDF, nên bốn tin bằng điểm.
+    G = _graph(extra_mentions=[(1, "misa")])
+    rankings = []
+    for order in (["misa", "python"], ["python", "misa"]):
+        # Thứ tự duyệt một set chuỗi đổi theo PYTHONHASHSEED giữa các lần chạy; giả lập cả hai thứ tự.
+        monkeypatch.setattr("career_advisor.retrieval.hybrid.extract_skills", lambda G, text, o=order: o)
+        rankings.append(GraphSearcher(G).search("misa và python", k=4).posting_id.tolist())
+
+    assert rankings == [[0, 1, 3, 4], [0, 1, 3, 4]]

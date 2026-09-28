@@ -85,7 +85,9 @@ class GraphSearcher:
 
     def search(self, query: str, k: int = 10) -> pd.DataFrame:
         scores: dict[int, float] = defaultdict(float)
-        for skill in extract_skills(self.G, query):
+        # Thứ tự duyệt set chuỗi đổi theo PYTHONHASHSEED: sắp kỹ năng để tổng IDF cộng theo cùng một thứ tự,
+        # và sắp posting_id để tin bằng điểm luôn xếp theo mã tin (như rrf).
+        for skill in sorted(extract_skills(self.G, query)):
             holders = postings_of(self.G, skill_id(skill))
             if not holders:
                 continue
@@ -94,5 +96,5 @@ class GraphSearcher:
                 scores[pid] += idf
         if not scores:
             return pd.DataFrame(columns=["posting_id", "score"])
-        ids = pd.Series(scores)
+        ids = pd.Series(scores).sort_index()
         return _top_k(ids.index.to_numpy(), ids.to_numpy(), k)
