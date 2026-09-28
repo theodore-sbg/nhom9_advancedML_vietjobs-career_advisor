@@ -11,7 +11,7 @@ from collections.abc import Callable
 
 from career_advisor.rag.subgraph import fmt_number
 
-Column = tuple[str, str, str]  # (tiêu đề, khoá trong dòng, kiểu: text | int | num | avg | pct | sec)
+Column = tuple[str, str, str]  # (tiêu đề, khoá trong dòng, kiểu: text | int | num | avg | pct | sec | p)
 Table = tuple[str, list[dict], list[Column]]  # (tiêu đề phụ, dòng, cột)
 
 
@@ -22,6 +22,8 @@ def _cell(value, kind: str) -> str:
         return fmt_number(value, pct=True)
     if kind == "num":  # chỉ số 0–1 như F1, MRR, κ: giữ 3 chữ số
         return f"{value:.3f}".replace(".", ",")
+    if kind == "p":
+        return "< 0,001" if value < 0.001 else f"{value:.3f}".replace(".", ",")
     if kind == "avg":  # trung bình đếm được như số lượt, số kỹ năng, GB
         return fmt_number(value)
     if kind == "int":
@@ -93,6 +95,20 @@ def _retrieval(d: dict) -> list[Table]:
             [("Mức so", "level", "text"), ("κ", "kappa", "num"), ("Trùng khớp", "agree", "pct")],
         ),
     ]
+
+
+def _significance(d: dict) -> list[Table]:
+    rows = [
+        {**r, "ci": f"[{_cell(r['ci_low'], 'num')}; {_cell(r['ci_high'], 'num')}]"} for r in _test(d["rows"])
+    ]
+    cols = [
+        ("Hiệu (a − b)", "system", "text"),
+        ("Δ nDCG@10", "mean_diff", "num"),
+        ("Khoảng tin cậy 95%", "ci", "text"),
+        ("p", "p_value", "p"),
+        ("Số CV", "n", "int"),
+    ]
+    return [(d["method"], rows, cols)]
 
 
 def _entity_resolution(d: dict) -> list[Table]:
@@ -196,6 +212,7 @@ def _llm_benchmark(d: dict) -> list[Table]:
 
 SECTIONS: list[tuple[str, str, Callable[[dict], list[Table]]]] = [
     ("Truy xuất CV → tin", "retrieval", _retrieval),
+    ("Kiểm định chênh lệch nDCG@10", "significance", _significance),
     ("Gộp tên kỹ năng", "entity_resolution", _entity_resolution),
     ("Hỏi đáp: KG-RAG so với vector RAG", "qa_kg_vs_vector", _qa),
     ("Ablation", "ablation", _ablation),

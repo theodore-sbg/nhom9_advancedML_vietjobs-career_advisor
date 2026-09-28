@@ -74,3 +74,21 @@ def labeled_precision(
             }
         )
     return pd.DataFrame(rows)
+
+
+def paired_ndcg(
+    rankings: dict[str, dict[str, list[int]]],
+    grades: dict[str, dict[int, int]],
+    system_a: str,
+    system_b: str,
+    k: int = K,
+) -> tuple[list[float], list[float]]:
+    """nDCG@k theo từng CV của hai hệ, ghép cặp. Bỏ CV mà một trong hai hệ không có nDCG."""
+    a, b = [], []
+    for cv, per_cv in rankings.items():
+        g = {pid: v for pid, v in grades.get(cv, {}).items() if v is not None}
+        x, y = ndcg_at_k(per_cv[system_a][:k], g, k), ndcg_at_k(per_cv[system_b][:k], g, k)
+        if x is not None and y is not None:
+            a.append(x)
+            b.append(y)
+    return a, b

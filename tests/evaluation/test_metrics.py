@@ -55,3 +55,42 @@ def test_cohen_kappa_matches_sklearn():
 
     assert cohen_kappa(a, b) == pytest.approx(cohen_kappa_score(a, b))
     assert cohen_kappa(a, b, weights="linear") == pytest.approx(cohen_kappa_score(a, b, weights="linear"))
+
+
+def test_paired_bootstrap_on_identical_scores_finds_no_difference():
+    from career_advisor.evaluation.metrics import paired_bootstrap
+
+    result = paired_bootstrap([0.5, 0.7, 0.9, 0.6], [0.5, 0.7, 0.9, 0.6])
+
+    assert result["mean_diff"] == 0
+    assert result["ci_low"] <= 0 <= result["ci_high"]
+    assert result["p_value"] == 1.0
+
+
+def test_paired_bootstrap_detects_a_consistent_gain():
+    from career_advisor.evaluation.metrics import paired_bootstrap
+
+    a = [0.80, 0.75, 0.90, 0.85, 0.70, 0.95, 0.88, 0.79]
+    b = [x - 0.1 for x in a]
+    result = paired_bootstrap(a, b)
+
+    assert abs(result["mean_diff"] - 0.1) < 1e-9
+    assert result["ci_low"] > 0
+    assert result["p_value"] < 0.01
+    assert result["n"] == 8
+
+
+def test_paired_bootstrap_is_deterministic_for_a_seed():
+    from career_advisor.evaluation.metrics import paired_bootstrap
+
+    a, b = [0.3, 0.9, 0.5, 0.7, 0.2], [0.4, 0.6, 0.5, 0.9, 0.1]
+    assert paired_bootstrap(a, b) == paired_bootstrap(a, b)
+
+
+def test_paired_bootstrap_rejects_unpaired_input():
+    import pytest
+
+    from career_advisor.evaluation.metrics import paired_bootstrap
+
+    with pytest.raises(ValueError):
+        paired_bootstrap([0.1, 0.2], [0.1])

@@ -93,3 +93,8 @@ def test_thresholds_are_shown_without_rounding():
 def test_averages_are_shown_with_one_decimal():
     cols = [("Lượt LLM", "calls", "avg"), ("RAM", "ram", "avg")]
     assert md_table([{"calls": 1.0, "ram": 5.64}], cols).splitlines()[2] == "| 1 | 5,6 |"
+
+
+def test_tiny_p_values_are_shown_as_below_one_thousandth():
+    cols = [("p", "p", "p")]
+    assert md_table([{"p": 0.0}, {"p": 0.266}], cols).splitlines()[2:] == ["| < 0,001 |", "| 0,266 |"]

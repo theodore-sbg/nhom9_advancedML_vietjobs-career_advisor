@@ -1,0 +1,80 @@
+{
+  "date": "2026-09-28",
+  "commit": "ab122ae",
+  "metric": "nDCG@10 theo điểm Qwen",
+  "method": "bootstrap ghép cặp theo CV, 10.000 mẫu, seed 42, p hai phía",
+  "rows": [
+    {
+      "split": "dev",
+      "system": "hybrid − bm25",
+      "n": 20,
+      "mean_diff": 0.07454606780295485,
+      "ci_low": 0.006940230188908309,
+      "ci_high": 0.14546003171081937,
+      "p_value": 0.0286
+    },
+    {
+      "split": "dev",
+      "system": "dense − hybrid",
+      "n": 20,
+      "mean_diff": -0.06409124359189226,
+      "ci_low": -0.1373107101999718,
+      "ci_high": -0.010081784700062348,
+      "p_value": 0.0144
+    },
+    {
+      "split": "dev",
+      "system": "hybrid+graph − hybrid",
+      "n": 20,
+      "mean_diff": 0.024092293845149274,
+      "ci_low": -0.026405693676856606,
+      "ci_high": 0.07562635224932203,
+      "p_value": 0.3554
+    },
+    {
+      "split": "dev",
+      "system": "dense − tfidf",
+      "n": 20,
+      "mean_diff": 0.04826730396826671,
+      "ci_low": -0.045727565882088324,
+      "ci_high": 0.13871845476224762,
+      "p_value": 0.3198
+    },
+    {
+      "split": "test",
+      "system": "hybrid − bm25",
+      "n": 20,
+      "mean_diff": 0.10504020058393837,
+      "ci_low": 0.049692040377452715,
+      "ci_high": 0.1670335381246045,
+      "p_value": 0.0004
+    },
+    {
+      "split": "test",
+      "system": "dense − hybrid",
+      "n": 20,
+      "mean_diff": 0.05140991688421591,
+      "ci_low": -0.03534808532076229,
+      "ci_high": 0.1479785914141269,
+      "p_value": 0.2662
+    },
+    {
+      "split": "test",
+      "system": "hybrid+graph − hybrid",
+      "n": 20,
+      "mean_diff": -0.013379376870344553,
+      "ci_low": -0.05220702943023074,
+      "ci_high": 0.02628614977971488,
+      "p_value": 0.51
+    },
+    {
+      "split": "test",
+      "system": "dense − tfidf",
+      "n": 20,
+      "mean_diff": 0.1374706879268571,
+      "ci_low": 0.03696247229122157,
+      "ci_high": 0.24016998403783069,
+      "p_value": 0.0088
+    }
+  ]
+}

@@ -36,3 +36,19 @@ def test_labeled_precision_scores_each_system_on_the_labeled_pairs_in_its_top_k(
     assert table.loc["a", "share_relevant"] == 0.5 and table.loc["a", "share_partly"] == 0.5
     assert table.loc["b", "share_relevant"] == 2 / 3 and table.loc["b", "share_partly"] == 1.0
     assert table.loc["b", "mean_grade"] == 5 / 3
+
+
+def test_paired_ndcg_skips_cvs_without_relevant_postings():
+    from career_advisor.evaluation.retrieval_eval import paired_ndcg
+
+    rankings = {
+        "cv1": {"a": [1, 2], "b": [2, 1]},
+        "cv2": {"a": [3], "b": [3]},  # không có tin nào được chấm > 0 → nDCG không xác định
+    }
+    grades = {"cv1": {1: 2, 2: 0}, "cv2": {3: 0}}
+
+    a, b = paired_ndcg(rankings, grades, "a", "b", k=2)
+
+    assert len(a) == len(b) == 1
+    assert a[0] == 1.0
+    assert b[0] < 1.0

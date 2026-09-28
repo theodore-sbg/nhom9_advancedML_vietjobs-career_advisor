@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import numpy as np
+
 
 def precision_recall(truth: Sequence[bool], pred: Sequence[bool]) -> dict:
     """Precision, recall, F1 cho bài toán nhị phân. Không có dự đoán dương thì precision là None."""
@@ -52,3 +54,24 @@ def cohen_kappa(a: Sequence[int], b: Sequence[int], weights: str | None = None) 
     from sklearn.metrics import cohen_kappa_score
 
     return float(cohen_kappa_score(a, b, weights=weights))
+
+
+def paired_bootstrap(a: Sequence[float], b: Sequence[float], n_boot: int = 10_000, seed: int = 42) -> dict:
+    """Bootstrap ghép cặp cho hiệu trung bình a − b (mỗi phần tử là điểm của cùng một CV ở hai hệ).
+
+    Lấy mẫu lại các CV có hoàn lại. Khoảng tin cậy 95% theo phân vị. p hai phía = 2 × phần nhỏ hơn
+    của các mẫu có hiệu ≤ 0 và ≥ 0, chặn trên ở 1.
+    """
+    if len(a) != len(b):
+        raise ValueError(f"a và b phải ghép cặp: {len(a)} ≠ {len(b)}")
+    diff = np.asarray(a, dtype=float) - np.asarray(b, dtype=float)
+    rng = np.random.default_rng(seed)
+    means = diff[rng.integers(0, len(diff), size=(n_boot, len(diff)))].mean(axis=1)
+    p = 2 * min(np.mean(means <= 0), np.mean(means >= 0))
+    return {
+        "n": len(diff),
+        "mean_diff": float(diff.mean()),
+        "ci_low": float(np.percentile(means, 2.5)),
+        "ci_high": float(np.percentile(means, 97.5)),
+        "p_value": float(min(1.0, p)),
+    }

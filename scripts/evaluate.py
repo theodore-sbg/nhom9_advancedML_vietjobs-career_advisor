@@ -3,6 +3,7 @@
 python scripts/evaluate.py er-thresholds       # chọn ngưỡng gộp tên trên phần dev
 python scripts/evaluate.py entity-resolution   # 4 hệ gộp tên, chỉ số trên dev và test
 python scripts/evaluate.py retrieval           # 5 cách truy xuất CV → tin, LLM chấm độ phù hợp
+python scripts/evaluate.py significance        # bootstrap ghép cặp cho chênh lệch nDCG@10, không gọi LLM
 python scripts/evaluate.py kappa               # độ khớp giữa điểm LLM và nhãn tay (người, Claude)
 python scripts/evaluate.py kg-rag              # KG-RAG so với vector RAG trên bộ 50 câu hỏi
 python scripts/evaluate.py ablation            # 1 agent so với 4 agent, có và không có gộp tên kỹ năng
@@ -217,6 +218,45 @@ def retrieval() -> None:
     result = {**_meta(client), "k": K, "n_pairs_judged": total, "rows": table.to_dict("records")}
     result["agreement"] = _agreement(pd.DataFrame(rows, columns=["cv_id", "posting_id", "grade"]))
     (RESULTS / "retrieval.json").write_text(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+# (hệ a, hệ b): a có hơn b thật không, hay chỉ là nhiễu của 20 CV
+SIGNIFICANCE_PAIRS = (("hybrid", "bm25"), ("dense", "hybrid"), ("hybrid+graph", "hybrid"), ("dense", "tfidf"))
+
+
+def significance() -> None:
+    from career_advisor.evaluation.metrics import paired_bootstrap
+    from career_advisor.evaluation.retrieval_eval import K, paired_ndcg
+
+    rankings = json.loads((RESULTS / "retrieval_rankings.json").read_text())
+    llm = pd.read_csv(RELEVANCE_LLM).dropna(subset=["grade"])
+    grades = {
+        cv: dict(zip(g["posting_id"], g["grade"].astype(int), strict=True)) for cv, g in llm.groupby("cv_id")
+    }
+    cvs = [
+        json.loads(line) for line in (EVAL_DIR / "cvs" / "cvs.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    rows = []
+    for split in ("dev", "test"):
+        subset = {cv["id"]: rankings[cv["id"]] for cv in cvs if cv["split"] == split}
+        for a, b in SIGNIFICANCE_PAIRS:
+            result = paired_bootstrap(*paired_ndcg(subset, grades, a, b, k=K))
+            rows.append({"split": split, "system": f"{a} − {b}", **result})
+            print(
+                f"{split:4} {a:>12} − {b:<7} Δ={result['mean_diff']:+.3f} "
+                f"CI95=[{result['ci_low']:+.3f}, {result['ci_high']:+.3f}] p={result['p_value']:.3f}"
+            )
+    commit = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True
+    ).stdout.strip()
+    result = {
+        "date": str(date.today()),
+        "commit": commit,
+        "metric": f"nDCG@{K} theo điểm Qwen",
+        "method": "bootstrap ghép cặp theo CV, 10.000 mẫu, seed 42, p hai phía",
+        "rows": rows,
+    }
+    (RESULTS / "significance.json").write_text(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 def load_questions() -> list[dict]:
@@ -540,6 +580,7 @@ if __name__ == "__main__":
         "er-thresholds": er_thresholds,
         "entity-resolution": entity_resolution,
         "retrieval": retrieval,
+        "significance": significance,
         "kappa": kappa,
         "kg-rag": kg_rag,
         "ablation": ablation,
