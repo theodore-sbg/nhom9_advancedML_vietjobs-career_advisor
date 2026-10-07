@@ -1,3 +1,5 @@
 [server]
 # Không theo dõi tệp: quét module transformers sinh hàng trăm lỗi torchvision trong log.
 fileWatcherType = "none"
+# Chỉ nghe trên máy này: trên Wi-Fi lớp học, người khác không mở được trang và chạy LLM trên máy demo.
+address = "localhost"
