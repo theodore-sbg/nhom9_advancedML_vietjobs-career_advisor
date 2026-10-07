@@ -14,7 +14,8 @@ from career_advisor.floor_guard import find_violations, parse_diff
 
 
 def _git(*args: str, check: bool = True) -> str:
-    result = subprocess.run(["git", *args], capture_output=True, text=True)
+    # quotePath=false: tên tệp tiếng Việt không bị đổi thành "th\\341..." trong ngoặc kép.
+    result = subprocess.run(["git", "-c", "core.quotePath=false", *args], capture_output=True, text=True)
     if check and result.returncode != 0:
         raise RuntimeError(result.stderr.strip())
     return result.stdout
@@ -23,7 +24,8 @@ def _git(*args: str, check: bool = True) -> str:
 def collect_diff(base: str) -> str:
     """Diff so với mốc, cộng cả tệp mới chưa được git theo dõi."""
     parts = [_git("diff", "--unified=0", base, "--")]
-    for path in _git("ls-files", "--others", "--exclude-standard").splitlines():
+    # -z: tách tên bằng \\0, không bị ngoặc kép hay ký tự đặc biệt làm hỏng tên.
+    for path in filter(None, _git("ls-files", "-z", "--others", "--exclude-standard").split("\0")):
         parts.append(_git("diff", "--no-index", "--unified=0", "/dev/null", path, check=False))
     return "\n".join(parts)
 

@@ -154,3 +154,59 @@ def test_parse_diff_keeps_content_lines_that_look_like_file_headers():
 
     assert removed == [Line("tests/test_a.py", "-- ghi chú"), Line("tests/test_a.py", "    assert x")]
     assert added == [Line("tests/test_a.py", "++ tiêu đề")]
+
+
+def test_parse_diff_decodes_git_quoted_non_ascii_paths():
+    diff = (
+        'diff --git "a/th\\341\\273\\255.py" "b/th\\341\\273\\255.py"\n'
+        '--- "a/th\\341\\273\\255.py"\n'
+        '+++ "b/th\\341\\273\\255.py"\n'
+        "@@ -0,0 +1 @@\n"
+        "+x = 1  # noqa\n"
+    )
+    added, _ = parse_diff(diff)
+
+    assert added == [Line("thử.py", "x = 1  # noqa")]
+    assert [v.rule for v in find_violations(added, [])] == ["silenced-checker"]
+
+
+def test_multiline_swallowed_exception_is_flagged():
+    added = [Line("src/a.py", "    except ValueError:"), Line("src/a.py", "        pass")]
+    assert _rules(added=added) == ["unfinished-work"]
+
+
+def test_except_followed_by_real_handling_is_not_flagged():
+    added = [Line("src/a.py", "    except ValueError:"), Line("src/a.py", "        return None")]
+    assert _rules(added=added) == []
+
+
+def test_pytest_xfail_call_is_flagged():
+    assert _rules(added=[Line("tests/test_a.py", "    pytest.xfail('chưa sửa')")]) == ["test-made-easier"]
+
+
+def test_removing_a_pytest_raises_block_counts_as_lost_assertion():
+    removed = [Line("tests/test_a.py", "    with pytest.raises(ValueError):")]
+    assert _rules(removed=removed) == ["assertion-removed"]
+
+
+def test_deleting_a_constraint_row_is_flagged():
+    removed = [Line("CONSTRAINTS.md", "| Số test | 453 | không được giảm |")]
+    assert _rules(removed=removed) == ["constraint-removed"]
+
+
+def test_rewriting_the_direction_cell_does_not_hide_a_lowered_number():
+    removed = [Line("CONSTRAINTS.md", "| Số test | 453 | không được giảm |")]
+    added = [Line("CONSTRAINTS.md", "| Số test | 400 | theo dõi |")]
+    assert _rules(added, removed) == ["threshold-lowered"]
+
+
+def test_adding_a_constraint_row_with_any_id_is_flagged():
+    row = "| X1 | no-skip | tests/x.py | lý do | @theodore | 2026-12-01 |"
+    assert _rules(added=[Line("CONSTRAINTS.md", row)]) == ["constraint-added"]
+
+
+def test_parse_diff_drops_the_tab_git_appends_to_names_with_spaces():
+    diff = "--- /dev/null\n+++ b/thử nghiệm.py\t\n@@ -0,0 +1 @@\n+x = 1\n"
+    added, _ = parse_diff(diff)
+
+    assert added == [Line("thử nghiệm.py", "x = 1")]
