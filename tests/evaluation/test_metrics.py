@@ -94,3 +94,15 @@ def test_paired_bootstrap_rejects_unpaired_input():
 
     with pytest.raises(ValueError):
         paired_bootstrap([0.1, 0.2], [0.1])
+
+
+@pytest.mark.parametrize(
+    "a, b",
+    [([], []), ([0.5], [0.4]), ([float("nan"), 0.5], [0.4, 0.4]), ([0.5, 0.6], [0.4, float("nan")])],
+    ids=["empty", "single-pair", "nan-in-a", "nan-in-b"],
+)
+def test_paired_bootstrap_rejects_degenerate_input_instead_of_reporting_p_zero(a, b):
+    from career_advisor.evaluation.metrics import paired_bootstrap
+
+    with pytest.raises(ValueError):
+        paired_bootstrap(a, b)

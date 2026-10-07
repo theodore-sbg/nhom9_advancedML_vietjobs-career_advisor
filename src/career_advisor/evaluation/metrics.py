@@ -65,6 +65,12 @@ def paired_bootstrap(a: Sequence[float], b: Sequence[float], n_boot: int = 10_00
     if len(a) != len(b):
         raise ValueError(f"a và b phải ghép cặp: {len(a)} ≠ {len(b)}")
     diff = np.asarray(a, dtype=float) - np.asarray(b, dtype=float)
+    # Rỗng, 1 cặp hay có NaN thì mọi mẫu bootstrap giống nhau hoặc là NaN, và p tính ra 0 — trông như
+    # "có ý nghĩa". Báo lỗi thay vì trả một p sai.
+    if len(diff) < 2:
+        raise ValueError(f"cần ít nhất 2 cặp để bootstrap, có {len(diff)}")
+    if np.isnan(diff).any():
+        raise ValueError("điểm có NaN; bỏ các cặp thiếu điểm trước khi kiểm định")
     rng = np.random.default_rng(seed)
     means = diff[rng.integers(0, len(diff), size=(n_boot, len(diff)))].mean(axis=1)
     p = 2 * min(np.mean(means <= 0), np.mean(means >= 0))
