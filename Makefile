@@ -1,4 +1,4 @@
-# Các lệnh kiểm theo CONSTRAINTS.md. CONSTRAINTS.md là nguồn chuẩn; lệnh ở đây phải khớp với nó.
+# Các lệnh kiểm chất lượng code: lint, định dạng, kiểm phần nền trên diff, test.
 PY := .venv/bin/python
 
 .PHONY: check-fast check-task check-full

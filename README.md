@@ -1,7 +1,6 @@
 # Trợ lý tư vấn nghề nghiệp từ tin tuyển dụng VietJobs
 
 Đồ án môn Máy học nâng cao. Đề tài dùng KG-RAG và hệ đa tác tử trên bộ dữ liệu VietJobs.
-Bản đề xuất đầy đủ: [de-an-tu-van-nghe-nghiep-vietjobs.md](de-an-tu-van-nghe-nghiep-vietjobs.md).
 
 ## Cài đặt
 
@@ -72,7 +71,7 @@ curl localhost:11434/api/generate -d '{"model":"qwen3.5:9b","keep_alive":"60m"}'
 .venv/bin/python scripts/summarize_results.py    # gom eval/results/*.json → docs/results.md
 ```
 
-Bảng kết quả đầy đủ: [docs/results.md](docs/results.md). Nhãn tay nằm ở `eval/labels/` và do người làm đồ án
+Kết quả đo nằm ở `eval/results/*.json`; chạy `scripts/summarize_results.py` để sinh bảng tổng hợp `docs/results.md`. Nhãn tay nằm ở `eval/labels/` và do người làm đồ án
 gán (`label_relevance.py`, `label_data_quality.py`, `label_skill_pairs.py`).
 
 ## Test và kiểm chất lượng
@@ -82,7 +81,6 @@ make check-fast     # ruff + kiểm phần nền trên diff, vài giây
 make check-task     # thêm toàn bộ pytest, khoảng 10 giây
 ```
 
-Chuẩn chất lượng của repo ghi ở [CONSTRAINTS.md](CONSTRAINTS.md).
 
 ## Cấu trúc
 
