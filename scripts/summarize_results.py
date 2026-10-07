@@ -18,6 +18,7 @@ def main() -> None:
         if path.exists():
             # pandas ghi NaN cho ô trống (ví dụ trích dẫn của câu ngoài phạm vi); JSON chuẩn không có NaN.
             results[name] = json.loads(path.read_text(encoding="utf-8").replace("NaN", "null"))
+    OUT.parent.mkdir(parents=True, exist_ok=True)  # bản nộp có thể không có sẵn thư mục docs/
     OUT.write_text(build_report(results), encoding="utf-8")
     print(f"Đã ghi {OUT.relative_to(ROOT)} ({len(results)}/{len(SECTIONS)} phần có dữ liệu).")
 

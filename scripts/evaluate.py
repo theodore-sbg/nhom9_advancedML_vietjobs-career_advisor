@@ -4,7 +4,7 @@ python scripts/evaluate.py er-thresholds       # chọn ngưỡng gộp tên tr�
 python scripts/evaluate.py entity-resolution   # 4 hệ gộp tên, chỉ số trên dev và test
 python scripts/evaluate.py retrieval           # 5 cách truy xuất CV → tin, LLM chấm độ phù hợp
 python scripts/evaluate.py significance        # bootstrap ghép cặp cho chênh lệch nDCG@10, không gọi LLM
-python scripts/evaluate.py kappa               # độ khớp giữa điểm LLM và nhãn tay (người, Claude)
+python scripts/evaluate.py kappa               # độ khớp giữa điểm Qwen và nhãn tay của người
 python scripts/evaluate.py kg-rag              # KG-RAG so với vector RAG trên bộ 50 câu hỏi
 python scripts/evaluate.py ablation            # 1 agent so với 4 agent, có và không có gộp tên kỹ năng
 python scripts/evaluate.py latency             # thời gian trả lời của luồng 4 agent, không dùng cache
